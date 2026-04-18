@@ -1650,7 +1650,7 @@ async function uFetchProducts(){
   try{
     const resp=await fetch(U_PROXY+'?action=products');
     const data=await resp.json();
-    if(!resp.ok||data.error){
+    if(data.error&&!data.products?.length){
       status.textContent='❌ '+(data.error||'Erreur');
       status.style.color='var(--rupture)';
       return;
@@ -1666,10 +1666,10 @@ async function uFetchProducts(){
       const ds=p.dlc_stock;
       const dv=p.dlc_sale;
       const da=!!p.dlc_active;
-      const dvs=(ds!==null&&dv!==null)?ds-dv:null;
+      const dvs=(ds!==null&&ds!==undefined&&dv!==null&&dv!==undefined)?ds-dv:null;
       const cat=assignCat(dvs,da);
       return{
-        id:p.id,
+        id:+p.id,
         nom:p.name||'',
         typo:p.typology||'—',
         da,ds,dv,dvs,cat,
@@ -1687,10 +1687,11 @@ async function uFetchProducts(){
     _lastProdFromAPI=data.products;
     if(DU&&uParsed)uMatchWithAPIProducts(data.products);
 
-    document.getElementById('fPname').textContent='✓ '+data.count+' produits Système U frais (via API)';
+    const msg=data.count+'/'+data.found+' produits chargés ('+data.pages+' pages)';
+    document.getElementById('fPname').textContent='✓ '+msg;
     document.getElementById('fPname').style.display='block';
     document.getElementById('dzP').style.borderColor='var(--ok)';
-    status.textContent='✅ '+data.count+' produits chargés';
+    status.textContent='✅ '+msg+(data.error?' ⚠️ '+data.error:'');
     status.style.color='var(--ok)';
     checkReady();
   }catch(err){
