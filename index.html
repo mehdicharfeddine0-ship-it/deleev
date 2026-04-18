@@ -1486,16 +1486,16 @@ async function uFetchList(){
       return;
     }
 
-    // Filter: only BLs starting with 0216 (Système U frais)
-    uBLRows=data.rows.filter(r=>r.bl&&r.bl.startsWith('0216'));
+    // Show all BLs
+    uBLRows=data.rows;
 
     if(!uBLRows.length){
-      status.textContent='Aucun BL Système U frais (0216*) trouvé parmi '+data.rows.length+' BL.';
+      status.textContent='Aucun BL trouvé.';
       status.style.color='var(--warn)';
       return;
     }
 
-    status.textContent=uBLRows.length+' BL Système U frais';
+    status.textContent=uBLRows.length+' bon(s) de livraison';
     status.style.color='var(--ok)';
     uRenderBLList(listEl);
 
