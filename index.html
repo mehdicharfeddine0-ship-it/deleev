@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="fr" data-theme="dark">
 <head>
@@ -268,10 +267,18 @@ td{padding:9px 10px;vertical-align:middle;}
       <div class="drop-text">Glisse le <strong>JSON commande</strong> Système U<br>ou clique pour choisir</div>
       <input type="file" id="fU" accept=".json">
       <div class="file-ok" id="fUname" style="display:none"></div>
-      <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
-        <button class="ebtn" id="btnFetchU" onclick="uFetchList()" style="font-size:11px;padding:6px 14px">🔄 Charger depuis l'admin</button>
+      <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px" onclick="event.stopPropagation()">
+        <div id="uTokenArea" style="margin-bottom:8px">
+          <div style="display:flex;gap:6px;align-items:center;justify-content:center">
+            <input id="uTokenInput" type="password" placeholder="api_token admin.deleev.com" style="font-family:'Geist Mono',monospace;font-size:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;outline:none;width:220px" value="">
+            <button class="ebtn" id="btnFetchU" onclick="uFetchList()" style="font-size:11px;padding:6px 14px">🔄 Charger les BL</button>
+          </div>
+          <div style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--text3);margin-top:4px">
+            Token = valeur du cookie <strong>api_token</strong> sur admin.deleev.com · <a href="#" onclick="event.preventDefault();uShowTokenHelp()" style="color:var(--units)">Comment trouver ?</a>
+          </div>
+        </div>
         <div id="uFetchStatus" style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);margin-top:6px;display:none"></div>
-        <div id="uBLList" style="margin-top:8px;display:none;max-height:200px;overflow-y:auto"></div>
+        <div id="uBLList" style="margin-top:8px;display:none;max-height:250px;overflow-y:auto"></div>
       </div>
     </div>
   </div>
@@ -1452,10 +1459,35 @@ let uNbPrep=2,uCph=80,uTStart='06:00',uTEnd='';
 let uParsed=null; // parsed JSON data
 
 const U_ADMIN_BASE='https://admin.deleev.com';
-const U_LIST_URL=U_ADMIN_BASE+'/systemeu/delivery_notes/';
+const U_PROXY='/api/su';
+const U_LS_TOKEN='u_api_token';
 
-// Fetch list of delivery notes from admin
+function uGetToken(){
+  const inp=document.getElementById('uTokenInput');
+  let tok=inp?.value?.trim()||'';
+  if(!tok)tok=localStorage.getItem(U_LS_TOKEN)||'';
+  return tok;
+}
+
+function uSaveToken(tok){
+  if(tok)localStorage.setItem(U_LS_TOKEN,tok);
+  const inp=document.getElementById('uTokenInput');
+  if(inp&&tok)inp.value=tok;
+}
+
+function uShowTokenHelp(){
+  alert('Comment trouver votre api_token :\n\n1. Allez sur admin.deleev.com et connectez-vous\n2. Ouvrez les DevTools (F12) → onglet Application → Cookies\n3. Cherchez le cookie "api_token"\n4. Copiez sa valeur et collez-la ici\n\nLe token est sauvegardé localement dans votre navigateur.');
+}
+
+// Fetch list of BLs via proxy
 async function uFetchList(){
+  const token=uGetToken();
+  if(!token){
+    alert('Entrez d\'abord votre api_token.\nAllez sur admin.deleev.com → F12 → Application → Cookies → api_token');
+    return;
+  }
+  uSaveToken(token);
+
   const status=document.getElementById('uFetchStatus');
   const listEl=document.getElementById('uBLList');
   status.style.display='block';
@@ -1463,169 +1495,88 @@ async function uFetchList(){
   status.style.color='var(--units)';
   listEl.style.display='none';
 
-  // First, check if we have data from bookmarklet in localStorage
-  const cached=localStorage.getItem('u_bl_list');
-  if(cached){
-    try{
-      const data=JSON.parse(cached);
-      if(data.ts&&Date.now()-data.ts<3600000){ // valid for 1 hour
-        uShowBLList(data.rows,status,listEl,'(depuis cache bookmarklet)');
-        return;
-      }
-    }catch(e){}
-    localStorage.removeItem('u_bl_list');
-  }
-
   try{
-    const resp=await fetch(U_LIST_URL,{credentials:'include'});
-    if(!resp.ok)throw new Error('HTTP '+resp.status);
-    const html=await resp.text();
-    const rows=uParseDeliveryNotesPage(html);
-
-    if(!rows.length){
-      status.textContent='Aucun BL trouvé. Vérifiez votre connexion admin.';
+    const resp=await fetch(`${U_PROXY}?action=list&token=${encodeURIComponent(token)}`);
+    const data=await resp.json();
+    if(!resp.ok||data.error){
+      status.textContent='❌ '+( data.error||'Erreur HTTP '+resp.status);
+      status.style.color='var(--rupture)';
+      return;
+    }
+    if(!data.rows?.length){
+      status.textContent='Aucun BL trouvé.';
       status.style.color='var(--warn)';
       return;
     }
-    uShowBLList(rows,status,listEl,'');
+
+    // Show list
+    const display=data.rows.slice(0,25);
+    status.textContent=display.length+' bon(s) de livraison';
+    status.style.color='var(--ok)';
+    listEl.style.display='block';
+    listEl.innerHTML=display.map(r=>{
+      return`<div class="u-bl-item" onclick="uFetchBL('${r.pk}','${r.bl}')">
+        <div style="text-align:left">
+          <div style="font-weight:600;color:var(--text)">BL ${r.bl}</div>
+          <div style="font-size:9px;color:var(--text3)">${r.livraison} · ${r.palettes} pal.</div>
+          <div style="font-size:9px;color:var(--text3)">Exp. ${r.expedition}</div>
+        </div>
+        <span style="color:var(--ok);font-size:10px">Charger →</span>
+      </div>`;
+    }).join('');
 
   }catch(err){
+    status.textContent='❌ Erreur réseau: '+err.message;
     status.style.color='var(--rupture)';
-    // CORS or network error — show bookmarklet solution
-    const bookmarkletCode=`javascript:void(function(){var t=document.querySelectorAll('table tr'),r=[];for(var i=1;i<t.length;i++){var c=t[i].querySelectorAll('td');if(c.length>=4){var a=t[i].querySelector('a[href*=raw_u20]');var pk=a?a.href.match(/raw_u20\\/(\\d+)/):null;if(!pk){a=t[i].querySelector('a[href*=delivery_notes]');pk=a?a.href.match(/delivery_notes\\/(\\d+)/):[null,c[2].textContent.trim()];}r.push({pk:pk?pk[1]:'',livraison:c[0].textContent.trim(),expedition:c[1].textContent.trim(),bl:c[2].textContent.trim(),palettes:c[3].textContent.trim()});}}localStorage.setItem('u_bl_list',JSON.stringify({ts:Date.now(),rows:r}));alert('✅ '+r.length+' BL capturés ! Retournez sur votre dashboard.');})()`;
-
-    status.innerHTML=`⚠️ CORS bloqué depuis ${location.hostname}
-      <div style="margin-top:8px;font-size:10px;color:var(--text2);line-height:1.8">
-        <strong style="color:var(--text)">Solution 1 — Bookmarklet</strong> (recommandé) :<br>
-        Glissez ce lien dans votre barre de favoris → <a href="${bookmarkletCode}" style="color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent);border:1px solid color-mix(in srgb,var(--ok) 30%,transparent);padding:3px 10px;border-radius:5px;text-decoration:none;cursor:grab" onclick="event.preventDefault();alert('Glissez ce bouton dans votre barre de favoris !\\nPuis allez sur admin.deleev.com/systemeu/delivery_notes/ et cliquez dessus.')">📦 Capturer BL</a><br>
-        Puis ouvrez <a href="${U_LIST_URL}" target="_blank" style="color:var(--units)">admin.deleev.com</a>, cliquez sur le bookmarklet, et revenez ici.<br><br>
-        <strong style="color:var(--text)">Solution 2 — Saisie manuelle</strong> :<br>
-        <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
-          <input id="uManualPK" placeholder="ID du raw_u20 (ex: 8189)" style="font-family:'Geist Mono',monospace;font-size:11px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;outline:none;width:200px" onkeydown="if(event.key==='Enter')uFetchBLManual()">
-          <button class="ebtn" onclick="uFetchBLManual()" style="font-size:10px;padding:4px 10px">Charger</button>
-        </div>
-        <div style="margin-top:4px;color:var(--text3);font-size:9px">Trouvez l'ID dans l'URL : admin.deleev.com/systemeu/raw_u20/<strong style="color:var(--warn)">8189</strong>/</div>
-      </div>`;
   }
 }
 
-// Parse the delivery_notes HTML page
-function uParseDeliveryNotesPage(html){
-  const parser=new DOMParser();
-  const doc=parser.parseFromString(html,'text/html');
-  const rows=[];
-  const trs=doc.querySelectorAll('table tr');
-  for(let i=1;i<trs.length;i++){
-    const tds=trs[i].querySelectorAll('td');
-    if(tds.length<4)continue;
-    // Columns: Livraison prévue | Expédition | ID bon de livraison | Nombre de palettes | Détail
-    const livraison=tds[0]?.textContent.trim()||'';
-    const expedition=tds[1]?.textContent.trim()||'';
-    const bl=tds[2]?.textContent.trim()||'';
-    const palettes=tds[3]?.textContent.trim()||'';
-    // Find the pk from the Détail link
-    let pk='';
-    const detailLink=trs[i].querySelector('a');
-    if(detailLink){
-      const m=detailLink.href.match(/delivery_notes\/(\d+)/)||detailLink.href.match(/raw_u20\/(\d+)/);
-      if(m)pk=m[1];
-    }
-    // Also try to find raw_u20 link
-    const rawLink=trs[i].querySelector('a[href*="raw_u20"]');
-    let rawPk='';
-    if(rawLink){const m=rawLink.href.match(/raw_u20\/(\d+)/);if(m)rawPk=m[1];}
+// Fetch a specific BL JSON via proxy
+async function uFetchBL(pk,bl){
+  const token=uGetToken();
+  if(!token){alert('Token manquant');return;}
 
-    if(pk||rawPk||bl){
-      rows.push({pk:rawPk||pk,livraison,expedition,bl,palettes});
-    }
-  }
-
-  // Fallback: regex on raw HTML
-  if(!rows.length){
-    const seen=new Set();
-    let match;
-    const regex=/raw_u20\/(\d+)/g;
-    while((match=regex.exec(html))!==null){
-      if(!seen.has(match[1])){seen.add(match[1]);rows.push({pk:match[1],livraison:'',expedition:'',bl:'',palettes:''});}
-    }
-    const regex2=/delivery_notes\/(\d+)/g;
-    while((match=regex2.exec(html))!==null){
-      if(!seen.has(match[1])){seen.add(match[1]);rows.push({pk:match[1],livraison:'',expedition:'',bl:'',palettes:''});}
-    }
-  }
-  return rows;
-}
-
-function uShowBLList(rows,status,listEl,suffix){
-  const display=rows.slice(0,20);
-  status.textContent=display.length+' bon(s) de livraison '+suffix;
-  status.style.color='var(--ok)';
-  listEl.style.display='block';
-  listEl.innerHTML=display.map(r=>{
-    const id=r.pk||r.bl;
-    return`<div class="u-bl-item" id="ubl-${id}" onclick="uFetchBL('${id}')">
-      <div style="text-align:left">
-        <div style="font-weight:600;color:var(--text)">BL ${r.bl||r.pk}</div>
-        <div style="font-size:9px;color:var(--text3)">${r.livraison}${r.palettes?' · '+r.palettes+' pal.':''}</div>
-        ${r.expedition?`<div style="font-size:9px;color:var(--text3)">Exp. ${r.expedition}</div>`:''}
-      </div>
-      <span style="color:var(--ok);font-size:10px">Charger →</span>
-    </div>`;
-  }).join('');
-  listEl.addEventListener('click',e=>e.stopPropagation());
-}
-
-// Fetch a specific delivery note JSON by its raw_u20 PK
-async function uFetchBL(id){
-  const item=document.getElementById('ubl-'+id);
-  if(item)item.classList.add('loading');
   const status=document.getElementById('uFetchStatus');
-  status.textContent='Chargement du BL #'+id+'…';
+  status.textContent='Chargement du BL '+(bl||pk)+'…';
   status.style.color='var(--units)';
+
+  // Dim the clicked item
+  const items=document.querySelectorAll('.u-bl-item');
+  items.forEach(it=>it.style.opacity='.4');
+
   try{
-    const resp=await fetch(U_ADMIN_BASE+'/systemeu/raw_u20/'+id+'/',{credentials:'include'});
-    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const resp=await fetch(`${U_PROXY}?action=bl&pk=${pk}&token=${encodeURIComponent(token)}`);
     const json=await resp.json();
+    if(!resp.ok||json.error){
+      status.textContent='❌ '+(json.error||'Erreur HTTP '+resp.status);
+      status.style.color='var(--rupture)';
+      items.forEach(it=>it.style.opacity='1');
+      return;
+    }
+
     DU=json;
     const el=document.getElementById('fUname');
-    el.textContent='✓ BL '+id+' (chargé depuis admin)';
+    el.textContent='✓ BL '+(bl||pk)+' chargé';
     el.style.display='block';
     document.getElementById('dzU').style.borderColor='var(--ok)';
-    status.textContent='✓ BL #'+id+' chargé — '+((json.lignesLivraison||[]).length)+' réfs';
+    status.textContent='✅ BL '+(bl||pk)+' — '+((json.lignesLivraison||[]).length)+' réfs · '+((json.supportsDeLivraison||[]).length)+' palettes';
     status.style.color='var(--ok)';
     document.getElementById('uBLList').style.display='none';
     checkReady();
+
   }catch(err){
-    status.textContent='Erreur chargement BL #'+id+': '+err.message;
+    status.textContent='❌ '+err.message;
     status.style.color='var(--rupture)';
-    if(item)item.classList.remove('loading');
+    items.forEach(it=>it.style.opacity='1');
   }
 }
 
-// Manual PK entry fallback
-async function uFetchBLManual(){
-  const inp=document.getElementById('uManualPK');
-  if(!inp)return;
-  const pk=inp.value.trim();
-  if(!pk){alert('Entrez un ID de raw_u20');return;}
-  await uFetchBL(pk);
-}
-
-// On page load, check if bookmarklet left data
+// On page load, restore saved token
 (function(){
-  const cached=localStorage.getItem('u_bl_list');
-  if(cached){
-    try{
-      const data=JSON.parse(cached);
-      if(data.ts&&Date.now()-data.ts<3600000&&data.rows?.length){
-        // Show a small indicator on the drop zone
-        const status=document.getElementById('uFetchStatus');
-        if(status){
-          status.style.display='block';
-          status.innerHTML='<span style="color:var(--ok)">📦 '+data.rows.length+' BL en cache</span> — <a href="#" onclick="event.preventDefault();event.stopPropagation();uFetchList()" style="color:var(--units)">Afficher</a>';
-        }
-      }
-    }catch(e){}
+  const saved=localStorage.getItem(U_LS_TOKEN);
+  if(saved){
+    const inp=document.getElementById('uTokenInput');
+    if(inp)inp.value=saved;
   }
 })();
 
@@ -2017,4 +1968,3 @@ let _lastProdCSV=null;
 </script>
 </body>
 </html>
-
