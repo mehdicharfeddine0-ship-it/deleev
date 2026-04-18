@@ -52,78 +52,34 @@ module.exports = async function handler(req, res) {
         'User-Agent': 'Mozilla/5.0',
       };
 
-      var allProducts = [];
-      var page = 1;
-      var totalFound = 0;
-      var lastError = null;
+      // Fetch just 1 product to see all raw fields
+      var resp2 = await fetch('https://search.deleev.com/staff/', {
+        method: 'POST',
+        headers: searchHeaders,
+        body: JSON.stringify({
+          indexName: 'prod_products',
+          q: '*',
+          perPage: 2,
+          page: 1,
+          queryBy: 'selling_name,primeur_origin',
+          filterBy: 'supplierreferences.supplier:=192',
+          sortBy: 'updated_at_timestamp:desc'
+        })
+      });
 
-      while (page <= 10) {
-        var resp2;
-        try {
-          resp2 = await fetch('https://search.deleev.com/staff/', {
-            method: 'POST',
-            headers: searchHeaders,
-            body: JSON.stringify({
-              indexName: 'prod_products',
-              q: '*',
-              perPage: 250,
-              page: page,
-              queryBy: 'selling_name,primeur_origin',
-              filterBy: 'supplierreferences.supplier:=192',
-              sortBy: 'updated_at_timestamp:desc'
-            })
-          });
-        } catch (fetchErr) {
-          lastError = 'Fetch error page ' + page + ': ' + fetchErr.message;
-          break;
-        }
-
-        if (!resp2.ok) {
-          var t = '';
-          try { t = await resp2.text(); } catch(e) {}
-          lastError = 'API ' + resp2.status + ' page ' + page + ': ' + t.substring(0, 200);
-          break;
-        }
-
-        var data;
-        try {
-          data = await resp2.json();
-        } catch (jsonErr) {
-          lastError = 'JSON parse error page ' + page;
-          break;
-        }
-
-        totalFound = data.found || totalFound;
-        var hits = data.hits || [];
-
-        for (var i = 0; i < hits.length; i++) {
-          var d = hits[i].document || hits[i];
-          allProducts.push({
-            id: d.id || 0,
-            name: d.selling_name || d.name || '',
-            barcode: d.barcode || '',
-            typology: d.typology || '',
-            stock: typeof d.stock_reuilly === 'number' ? d.stock_reuilly : (typeof d.stock === 'number' ? d.stock : null),
-            qi: typeof d.qi_reuilly === 'number' ? d.qi_reuilly : null,
-            qd: typeof d.qd_reuilly === 'number' ? d.qd_reuilly : null,
-            dlc_stock: typeof d.dlc_stock_days === 'number' ? d.dlc_stock_days : null,
-            dlc_sale: typeof d.dlc_sale_days === 'number' ? d.dlc_sale_days : null,
-            dlc_active: !!d.dlc_active,
-            pack: d.pack || 1,
-            bio: !!d.bio,
-          });
-        }
-
-        if (hits.length < 250 || allProducts.length >= totalFound) break;
-        page++;
+      if (!resp2.ok) {
+        var t = await resp2.text().catch(function() { return ''; });
+        return res.status(200).json({ error: 'API ' + resp2.status, detail: t.substring(0, 500) });
       }
 
+      var data = await resp2.json();
+      var firstHit = data.hits && data.hits[0] ? data.hits[0] : null;
+
       return res.status(200).json({
-        count: allProducts.length,
-        found: totalFound,
-        products: allProducts,
-        error: lastError || undefined,
-        pages: page
+        found: data.found,
+        raw_hit_keys: firstHit ? Object.keys(firstHit) : [],
+        raw_document_keys: firstHit && firstHit.document ? Object.keys(firstHit.document) : [],
+        raw_document: firstHit ? (firstHit.document || firstHit) : null
       });
 
     } else {
