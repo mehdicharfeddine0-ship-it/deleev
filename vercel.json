@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/su.js": {
-      "maxDuration": 15
+      "maxDuration": 30
     }
   }
 }
