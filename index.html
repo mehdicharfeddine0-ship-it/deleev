@@ -1648,21 +1648,34 @@ async function uFetchProducts(){
   status.style.color='var(--units)';
 
   try{
-    const resp=await fetch(U_PROXY+'?action=products');
-    const data=await resp.json();
-    if(data.error&&!data.products?.length){
-      status.textContent='❌ '+(data.error||'Erreur');
-      status.style.color='var(--rupture)';
-      return;
+    let allProducts=[];
+    let page=1;
+    let totalFound=0;
+
+    while(page<=40){
+      status.textContent='Chargement page '+page+'… ('+allProducts.length+' produits)';
+      const resp=await fetch(U_PROXY+'?action=products&page='+page);
+      const data=await resp.json();
+      if(data.error){
+        if(allProducts.length>0)break;
+        status.textContent='❌ '+data.error;
+        status.style.color='var(--rupture)';
+        return;
+      }
+      totalFound=data.found||totalFound;
+      if(!data.products?.length)break;
+      allProducts=allProducts.concat(data.products);
+      if(data.products.length<250||allProducts.length>=totalFound)break;
+      page++;
     }
-    if(!data.products?.length){
+
+    if(!allProducts.length){
       status.textContent='Aucun produit trouvé.';
       status.style.color='var(--warn)';
       return;
     }
 
-    // Convert API products to DP format (same as parseProduits output)
-    DP=data.products.map(p=>{
+    DP=allProducts.map(p=>{
       const ds=p.dlc_stock;
       const dv=p.dlc_sale;
       const da=!!p.dlc_active;
@@ -1683,15 +1696,14 @@ async function uFetchProducts(){
       };
     });
 
-    // Also store raw products data for Système U matching
-    _lastProdFromAPI=data.products;
-    if(DU&&uParsed)uMatchWithAPIProducts(data.products);
+    _lastProdFromAPI=allProducts;
+    if(DU&&uParsed)uMatchWithAPIProducts(allProducts);
 
-    const msg=data.count+'/'+data.found+' produits chargés ('+data.pages+' pages)';
+    const msg=allProducts.length+'/'+totalFound+' produits ('+page+' pages)';
     document.getElementById('fPname').textContent='✓ '+msg;
     document.getElementById('fPname').style.display='block';
     document.getElementById('dzP').style.borderColor='var(--ok)';
-    status.textContent='✅ '+msg+(data.error?' ⚠️ '+data.error:'');
+    status.textContent='✅ '+msg;
     status.style.color='var(--ok)';
     checkReady();
   }catch(err){
