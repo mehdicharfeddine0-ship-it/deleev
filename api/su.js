@@ -3,7 +3,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const token = process.env.DELEEV_TOKEN;
-  if (!token) return res.status(500).json({ error: 'DELEEV_TOKEN non configuré sur Vercel' });
+  if (!token) return res.status(500).json({ error: 'DELEEV_TOKEN non configuré' });
 
   const { action, pk } = req.query;
   const BASE = 'https://admin.deleev.com';
@@ -13,13 +13,26 @@ export default async function handler(req, res) {
   };
 
   try {
-    if (action === 'list') {
+    if (action === 'debug') {
+      const resp = await fetch(BASE + '/systemeu/delivery_notes/', { headers, redirect: 'follow' });
+      const html = await resp.text();
+      // Return first 3000 chars of HTML so we can see the structure
+      return res.status(200).json({ 
+        status: resp.status,
+        length: html.length,
+        preview: html.substring(0, 3000),
+        hasTable: html.includes('<table'),
+        hasTr: html.includes('<tr'),
+        hasLogin: html.includes('id_username') || html.includes('/admin/login/')
+      });
+
+    } else if (action === 'list') {
       const resp = await fetch(BASE + '/systemeu/delivery_notes/', { headers });
       if (!resp.ok) return res.status(resp.status).json({ error: 'HTTP ' + resp.status });
       const html = await resp.text();
 
       if (html.includes('id_username') || html.includes('/admin/login/')) {
-        return res.status(401).json({ error: 'Token expiré. Mettez à jour DELEEV_TOKEN sur Vercel.' });
+        return res.status(401).json({ error: 'Token expiré' });
       }
 
       const rows = [];
@@ -43,7 +56,7 @@ export default async function handler(req, res) {
       return res.status(200).json(json);
 
     } else {
-      return res.status(400).json({ error: 'action=list ou action=bl&pk=XXX' });
+      return res.status(400).json({ error: 'action=list, action=debug, ou action=bl&pk=XXX' });
     }
   } catch (err) {
     return res.status(500).json({ error: err.message });
