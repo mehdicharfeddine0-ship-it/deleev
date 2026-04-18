@@ -268,15 +268,7 @@ td{padding:9px 10px;vertical-align:middle;}
       <input type="file" id="fU" accept=".json">
       <div class="file-ok" id="fUname" style="display:none"></div>
       <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px" onclick="event.stopPropagation()">
-        <div id="uTokenArea" style="margin-bottom:8px">
-          <div style="display:flex;gap:6px;align-items:center;justify-content:center">
-            <input id="uTokenInput" type="password" placeholder="api_token admin.deleev.com" style="font-family:'Geist Mono',monospace;font-size:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;outline:none;width:220px" value="">
-            <button class="ebtn" id="btnFetchU" onclick="uFetchList()" style="font-size:11px;padding:6px 14px">🔄 Charger les BL</button>
-          </div>
-          <div style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--text3);margin-top:4px">
-            Token = valeur du cookie <strong>api_token</strong> sur admin.deleev.com · <a href="#" onclick="event.preventDefault();uShowTokenHelp()" style="color:var(--units)">Comment trouver ?</a>
-          </div>
-        </div>
+        <button class="ebtn" id="btnFetchU" onclick="uFetchList()" style="font-size:11px;padding:6px 14px">🔄 Charger les BL</button>
         <div id="uFetchStatus" style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);margin-top:6px;display:none"></div>
         <div id="uBLList" style="margin-top:8px;display:none;max-height:250px;overflow-y:auto"></div>
       </div>
@@ -1458,36 +1450,10 @@ let uSubTab='vue',uPalSort='colis',uExpandedPal=null;
 let uNbPrep=2,uCph=80,uTStart='06:00',uTEnd='';
 let uParsed=null; // parsed JSON data
 
-const U_ADMIN_BASE='https://admin.deleev.com';
 const U_PROXY='/api/su';
-const U_LS_TOKEN='u_api_token';
-
-function uGetToken(){
-  const inp=document.getElementById('uTokenInput');
-  let tok=inp?.value?.trim()||'';
-  if(!tok)tok=localStorage.getItem(U_LS_TOKEN)||'';
-  return tok;
-}
-
-function uSaveToken(tok){
-  if(tok)localStorage.setItem(U_LS_TOKEN,tok);
-  const inp=document.getElementById('uTokenInput');
-  if(inp&&tok)inp.value=tok;
-}
-
-function uShowTokenHelp(){
-  alert('Comment trouver votre api_token :\n\n1. Allez sur admin.deleev.com et connectez-vous\n2. Ouvrez les DevTools (F12) → onglet Application → Cookies\n3. Cherchez le cookie "api_token"\n4. Copiez sa valeur et collez-la ici\n\nLe token est sauvegardé localement dans votre navigateur.');
-}
 
 // Fetch list of BLs via proxy
 async function uFetchList(){
-  const token=uGetToken();
-  if(!token){
-    alert('Entrez d\'abord votre api_token.\nAllez sur admin.deleev.com → F12 → Application → Cookies → api_token');
-    return;
-  }
-  uSaveToken(token);
-
   const status=document.getElementById('uFetchStatus');
   const listEl=document.getElementById('uBLList');
   status.style.display='block';
@@ -1496,10 +1462,10 @@ async function uFetchList(){
   listEl.style.display='none';
 
   try{
-    const resp=await fetch(`${U_PROXY}?action=list&token=${encodeURIComponent(token)}`);
+    const resp=await fetch(U_PROXY+'?action=list');
     const data=await resp.json();
     if(!resp.ok||data.error){
-      status.textContent='❌ '+( data.error||'Erreur HTTP '+resp.status);
+      status.textContent='❌ '+(data.error||'Erreur HTTP '+resp.status);
       status.style.color='var(--rupture)';
       return;
     }
@@ -1509,7 +1475,6 @@ async function uFetchList(){
       return;
     }
 
-    // Show list
     const display=data.rows.slice(0,25);
     status.textContent=display.length+' bon(s) de livraison';
     status.style.color='var(--ok)';
@@ -1526,59 +1491,41 @@ async function uFetchList(){
     }).join('');
 
   }catch(err){
-    status.textContent='❌ Erreur réseau: '+err.message;
+    status.textContent='❌ '+err.message;
     status.style.color='var(--rupture)';
   }
 }
 
 // Fetch a specific BL JSON via proxy
 async function uFetchBL(pk,bl){
-  const token=uGetToken();
-  if(!token){alert('Token manquant');return;}
-
   const status=document.getElementById('uFetchStatus');
   status.textContent='Chargement du BL '+(bl||pk)+'…';
   status.style.color='var(--units)';
-
-  // Dim the clicked item
-  const items=document.querySelectorAll('.u-bl-item');
-  items.forEach(it=>it.style.opacity='.4');
+  document.querySelectorAll('.u-bl-item').forEach(it=>it.style.opacity='.4');
 
   try{
-    const resp=await fetch(`${U_PROXY}?action=bl&pk=${pk}&token=${encodeURIComponent(token)}`);
+    const resp=await fetch(U_PROXY+'?action=bl&pk='+pk);
     const json=await resp.json();
     if(!resp.ok||json.error){
-      status.textContent='❌ '+(json.error||'Erreur HTTP '+resp.status);
+      status.textContent='❌ '+(json.error||'Erreur');
       status.style.color='var(--rupture)';
-      items.forEach(it=>it.style.opacity='1');
+      document.querySelectorAll('.u-bl-item').forEach(it=>it.style.opacity='1');
       return;
     }
-
     DU=json;
-    const el=document.getElementById('fUname');
-    el.textContent='✓ BL '+(bl||pk)+' chargé';
-    el.style.display='block';
+    document.getElementById('fUname').textContent='✓ BL '+(bl||pk);
+    document.getElementById('fUname').style.display='block';
     document.getElementById('dzU').style.borderColor='var(--ok)';
     status.textContent='✅ BL '+(bl||pk)+' — '+((json.lignesLivraison||[]).length)+' réfs · '+((json.supportsDeLivraison||[]).length)+' palettes';
     status.style.color='var(--ok)';
     document.getElementById('uBLList').style.display='none';
     checkReady();
-
   }catch(err){
     status.textContent='❌ '+err.message;
     status.style.color='var(--rupture)';
-    items.forEach(it=>it.style.opacity='1');
+    document.querySelectorAll('.u-bl-item').forEach(it=>it.style.opacity='1');
   }
 }
-
-// On page load, restore saved token
-(function(){
-  const saved=localStorage.getItem(U_LS_TOKEN);
-  if(saved){
-    const inp=document.getElementById('uTokenInput');
-    if(inp)inp.value=saved;
-  }
-})();
 
 const U_PAL_COLORS=['#3b82f6','#8b5cf6','#06b6d4','#f59e0b','#ec4899','#10b981','#f97316','#6366f1','#14b8a6','#e11d48','#84cc16','#a855f7'];
 function uPalColor(id){let h=0;for(let i=0;i<id.length;i++)h=((h<<5)-h+id.charCodeAt(i))|0;return U_PAL_COLORS[Math.abs(h)%U_PAL_COLORS.length];}
