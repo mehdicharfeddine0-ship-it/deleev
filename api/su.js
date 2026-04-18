@@ -11,6 +11,7 @@ module.exports = async function handler(req, res) {
 
     const action = req.query.action || '';
     const pk = req.query.pk || '';
+    const page = parseInt(req.query.page) || 1;
     const BASE = 'https://admin.deleev.com';
     const headers = { 'Cookie': cookie, 'User-Agent': 'Mozilla/5.0' };
 
@@ -40,119 +41,83 @@ module.exports = async function handler(req, res) {
       if (!resp2.ok) return res.status(200).json({ error: 'HTTP ' + resp2.status });
       var text = await resp2.text();
       try { return res.status(200).json(JSON.parse(text)); }
-      catch (e) { return res.status(200).json({ error: 'Réponse non-JSON', preview: text.substring(0, 200) }); }
+      catch (e) { return res.status(200).json({ error: 'Réponse non-JSON' }); }
 
     } else if (action === 'products') {
-      var searchHeaders = {
-        'Authorization': 'Token ' + apiToken,
-        'Content-Type': 'application/json;charset=UTF-8',
-        'User-Agent': 'Mozilla/5.0',
-      };
+      // Single page fetch — frontend handles pagination
+      var resp3 = await fetch('https://search.deleev.com/staff/', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Token ' + apiToken,
+          'Content-Type': 'application/json;charset=UTF-8',
+          'User-Agent': 'Mozilla/5.0',
+        },
+        body: JSON.stringify({
+          indexName: 'prod_products',
+          q: '*',
+          perPage: 250,
+          page: page,
+          queryBy: 'selling_name,primeur_origin',
+          filterBy: 'supplierreferences.supplier:=192',
+          sortBy: 'updated_at_timestamp:desc'
+        })
+      });
 
-      var allProducts = [];
-      var page = 1;
-      var totalFound = 0;
-      var lastError = null;
+      if (!resp3.ok) {
+        var errT = '';
+        try { errT = await resp3.text(); } catch(e) {}
+        return res.status(200).json({ error: 'API ' + resp3.status, detail: errT.substring(0, 300) });
+      }
 
-      while (page <= 40) {
-        var resp3;
-        try {
-          resp3 = await fetch('https://search.deleev.com/staff/', {
-            method: 'POST',
-            headers: searchHeaders,
-            body: JSON.stringify({
-              indexName: 'prod_products',
-              q: '*',
-              perPage: 250,
-              page: page,
-              queryBy: 'selling_name,primeur_origin',
-              filterBy: 'supplierreferences.supplier:=192',
-              sortBy: 'updated_at_timestamp:desc'
-            })
-          });
-        } catch (fetchErr) {
-          lastError = 'Fetch error page ' + page + ': ' + fetchErr.message;
-          break;
-        }
+      var data = await resp3.json();
+      var hits = data.hits || [];
+      var products = [];
 
-        if (!resp3.ok) {
-          var errT = '';
-          try { errT = await resp3.text(); } catch(e) {}
-          lastError = 'API ' + resp3.status + ' page ' + page + ': ' + errT.substring(0, 200);
-          break;
-        }
+      for (var i = 0; i < hits.length; i++) {
+        var d = hits[i].document || hits[i];
+        var c9 = (d.by_centers && d.by_centers['9']) ? d.by_centers['9'] : null;
 
-        var data;
-        try { data = await resp3.json(); }
-        catch (jsonErr) { lastError = 'JSON parse error page ' + page; break; }
-
-        totalFound = data.found || totalFound;
-        var hits = data.hits || [];
-
-        for (var i = 0; i < hits.length; i++) {
-          var h = hits[i];
-          // Data is directly on the hit, not in .document
-          var d = h.document || h;
-
-          // Get center 9 (Reuilly) data
-          var c9 = null;
-          if (d.by_centers && d.by_centers['9']) c9 = d.by_centers['9'];
-
-          // Parse retention periods for DLC stock/sale days
-          var dlcStock = null;
-          var dlcSale = null;
-          if (d.retention_periods && Array.isArray(d.retention_periods)) {
-            d.retention_periods.forEach(function(rp) {
-              if (rp.center === 9 || rp.center_id === 9) {
-                if (rp.stock_retention_days != null) dlcStock = rp.stock_retention_days;
-                if (rp.sale_retention_days != null) dlcSale = rp.sale_retention_days;
-              }
-            });
+        var dlcStock = null, dlcSale = null;
+        if (d.retention_periods && Array.isArray(d.retention_periods)) {
+          for (var j = 0; j < d.retention_periods.length; j++) {
+            var rp = d.retention_periods[j];
+            if (rp.center === 9 || rp.center_id === 9) {
+              if (rp.stock_retention_days != null) dlcStock = rp.stock_retention_days;
+              if (rp.sale_retention_days != null) dlcSale = rp.sale_retention_days;
+            }
           }
-          // Fallback to days_before_expiry or lifetime_days
-          if (dlcStock === null && typeof d.days_before_expiry === 'number') dlcStock = d.days_before_expiry;
-          if (dlcStock === null && typeof d.lifetime_days === 'number') dlcStock = d.lifetime_days;
-
-          // Typology: 1=Sec, 2=Surgelé, 3=Frais, etc
-          var typoMap = { 1: 'Sec', 2: 'Surgelé', 3: 'Frais', 4: 'Fruits & Légumes' };
-          var typoLabel = typoMap[d.typology] || (d.typology ? String(d.typology) : '—');
-
-          allProducts.push({
-            id: d.id || 0,
-            name: d.selling_name || d.name || '',
-            barcode: d.barcode || '',
-            typology: typoLabel,
-            stock: c9 ? c9.stock_quantity : null,
-            realStock: c9 ? c9.real_stock_quantity : null,
-            qi: c9 ? c9.quantity_ideal : null,
-            qd: c9 ? c9.quantity_threshold : null,
-            dlc_stock: dlcStock,
-            dlc_sale: dlcSale,
-            dlc_active: !!d.dlc_management_enabled,
-            pack: d.pack || 1,
-            bio: !!d.bio,
-            brand: d.brand_name || d.brand || '',
-            zone: c9 ? c9.area : null,
-            shelf: c9 ? c9.shelf : null,
-            price_buy: d.purchase_price || null,
-            price_sell: d.price || null,
-          });
         }
+        if (dlcStock === null && typeof d.days_before_expiry === 'number') dlcStock = d.days_before_expiry;
+        if (dlcStock === null && typeof d.lifetime_days === 'number') dlcStock = d.lifetime_days;
 
-        if (hits.length < 250 || allProducts.length >= totalFound) break;
-        page++;
+        var typoMap = { 1: 'Sec', 2: 'Surgelé', 3: 'Frais', 4: 'Fruits & Légumes' };
+
+        products.push({
+          id: d.id || 0,
+          name: d.selling_name || '',
+          barcode: d.barcode || '',
+          typology: typoMap[d.typology] || String(d.typology || ''),
+          stock: c9 ? c9.stock_quantity : null,
+          realStock: c9 ? c9.real_stock_quantity : null,
+          qi: c9 ? c9.quantity_ideal : null,
+          qd: c9 ? c9.quantity_threshold : null,
+          dlc_stock: dlcStock,
+          dlc_sale: dlcSale,
+          dlc_active: !!d.dlc_management_enabled,
+          pack: d.pack || 1,
+          bio: !!d.bio,
+        });
       }
 
       return res.status(200).json({
-        count: allProducts.length,
-        found: totalFound,
-        products: allProducts,
-        pages: page,
-        error: lastError || undefined
+        page: page,
+        count: products.length,
+        found: data.found || 0,
+        products: products
       });
 
     } else {
-      return res.status(200).json({ error: 'action=list, action=bl&pk=XXX, ou action=products' });
+      return res.status(200).json({ error: 'action=list, action=bl&pk=XXX, ou action=products&page=N' });
     }
   } catch (globalErr) {
     return res.status(200).json({ error: 'Crash: ' + globalErr.message });
