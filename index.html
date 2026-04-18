@@ -257,6 +257,10 @@ td{padding:9px 10px;vertical-align:middle;}
       <div class="drop-text">Glisse l'export <strong>CSV produits</strong><br>ou clique pour choisir</div>
       <input type="file" id="fP" accept=".csv">
       <div class="file-ok" id="fPname" style="display:none"></div>
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px" onclick="event.stopPropagation()">
+        <button class="ebtn" onclick="uFetchProducts()" style="font-size:10px;padding:5px 12px">📦 Charger produits Système U frais</button>
+        <div id="uProdStatus" style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--text3);margin-top:4px;display:none"></div>
+      </div>
     </div>
     <div class="drop-zone-c" id="dzC" style="border-color:color-mix(in srgb,var(--units) 40%,transparent)">
       <div class="dz-label" style="color:var(--units)">❄ Commandes Frais</div>
@@ -1636,6 +1640,100 @@ async function uFetchBL(pk,bl){
   }
 }
 
+// Fetch all Système U frais products via proxy
+async function uFetchProducts(){
+  const status=document.getElementById('uProdStatus');
+  status.style.display='block';
+  status.textContent='Chargement des produits Système U frais…';
+  status.style.color='var(--units)';
+
+  try{
+    const resp=await fetch(U_PROXY+'?action=products');
+    const data=await resp.json();
+    if(!resp.ok||data.error){
+      status.textContent='❌ '+(data.error||'Erreur');
+      status.style.color='var(--rupture)';
+      return;
+    }
+    if(!data.products?.length){
+      status.textContent='Aucun produit trouvé.';
+      status.style.color='var(--warn)';
+      return;
+    }
+
+    // Convert API products to DP format (same as parseProduits output)
+    DP=data.products.map(p=>{
+      const ds=p.dlc_stock;
+      const dv=p.dlc_sale;
+      const da=!!p.dlc_active;
+      const dvs=(ds!==null&&dv!==null)?ds-dv:null;
+      const cat=assignCat(dvs,da);
+      return{
+        id:p.id,
+        nom:p.name||'',
+        typo:p.typology||'—',
+        da,ds,dv,dvs,cat,
+        colis:'free',
+        pack:p.pack||1,
+        supId:'192',
+        barcode:p.barcode||'',
+        stock:p.stock,
+        qi:p.qi,
+        qd:p.qd,
+      };
+    });
+
+    // Also store raw products data for Système U matching
+    _lastProdFromAPI=data.products;
+    if(DU&&uParsed)uMatchWithAPIProducts(data.products);
+
+    document.getElementById('fPname').textContent='✓ '+data.count+' produits Système U frais (via API)';
+    document.getElementById('fPname').style.display='block';
+    document.getElementById('dzP').style.borderColor='var(--ok)';
+    status.textContent='✅ '+data.count+' produits chargés';
+    status.style.color='var(--ok)';
+    checkReady();
+  }catch(err){
+    status.textContent='❌ '+err.message;
+    status.style.color='var(--rupture)';
+  }
+}
+
+// Match Système U delivery with API-loaded products (by barcode/GTIN)
+let _lastProdFromAPI=null;
+function uMatchWithAPIProducts(products){
+  if(!uParsed||!products)return;
+  // Build barcode lookup
+  const byBC={};
+  products.forEach(p=>{
+    if(p.barcode)byBC[p.barcode]={stock:p.stock??0,name:p.name||''};
+  });
+
+  let matched=0,unmatched=0,inStock=0,rupture=0;
+  const details=uParsed.lignes.map(l=>{
+    const g=l.gtin,e=l.ean14;
+    const tries=[g,g?.slice(1),'0'+g,e,e?.slice(1)].filter(Boolean);
+    let found=null;
+    for(const t of tries){if(byBC[t]){found=byBC[t];break;}}
+    const stock=found?found.stock:null;
+    const isRup=stock!==null&&stock<=0;
+    if(found)matched++;else unmatched++;
+    if(stock>0)inStock++;
+    if(isRup)rupture++;
+    return{
+      name:l.libelleUniteLivraison,gtin:l.gtin,ean14:l.ean14,
+      qty:l.quantiteEnUniteDeLivraison?.livree||0,udc:l.quantiteLivreeEnUniteDeConsommation||0,
+      stock,matched:!!found,rupture:isRup,bio:(l.commentaire||'').includes('BIO'),
+      prodName:found?.name||null,
+      supports:(l.supports||[]).map(s=>s.idSupport)
+    };
+  });
+
+  uParsed.matchData={matched,unmatched,inStock,rupture,total:uParsed.lignes.length,details,
+    matchRate:uParsed.lignes.length>0?matched/uParsed.lignes.length:0};
+  uRender();
+}
+
 const U_PAL_COLORS=['#3b82f6','#8b5cf6','#06b6d4','#f59e0b','#ec4899','#10b981','#f97316','#6366f1','#14b8a6','#e11d48','#84cc16','#a855f7'];
 function uPalColor(id){let h=0;for(let i=0;i<id.length;i++)h=((h<<5)-h+id.charCodeAt(i))|0;return U_PAL_COLORS[Math.abs(h)%U_PAL_COLORS.length];}
 function uTimeStr(m){return String(Math.floor(m/60)).padStart(2,'0')+':'+String(Math.round(m%60)).padStart(2,'0');}
@@ -1671,7 +1769,8 @@ function uInit(){
   };
 
   // Match with product export if loaded
-  if(_lastProdCSV)uMatchWithProducts(_lastProdCSV);
+  if(_lastProdFromAPI)uMatchWithAPIProducts(_lastProdFromAPI);
+  else if(_lastProdCSV)uMatchWithProducts(_lastProdCSV);
   else uDoMatch();
   uRender();
 }
