@@ -1,10 +1,10 @@
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   try {
     res.setHeader('Access-Control-Allow-Origin', '*');
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     const cookie = process.env.DELEEV_TOKEN;
-    if (!cookie) return res.status(500).json({ error: 'DELEEV_TOKEN non configuré' });
+    if (!cookie) return res.status(200).json({ error: 'DELEEV_TOKEN non configuré' });
 
     const tokenMatch = cookie.match(/api_token=([^;]+)/);
     const apiToken = tokenMatch ? tokenMatch[1].trim() : cookie.trim();
@@ -21,47 +21,46 @@ export default async function handler(req, res) {
       if (html.includes('FormSignin') || html.includes('action="/account/login"')) {
         return res.status(200).json({ error: 'Session expirée.', rows: [] });
       }
-      const rows = [];
-      const trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-      let tr;
+      var rows = [];
+      var trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+      var tr;
       while ((tr = trRe.exec(html)) !== null) {
-        const tds = [];
-        const tdRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-        let td;
+        var tds = [];
+        var tdRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+        var td;
         while ((td = tdRe.exec(tr[1])) !== null) tds.push(td[1].replace(/<[^>]+>/g, '').trim());
         if (tds.length < 4) continue;
-        const lm = tr[1].match(/delivery_note\/(\d+)/);
+        var lm = tr[1].match(/delivery_note\/(\d+)/);
         rows.push({ pk: lm ? lm[1] : '', livraison: tds[0], expedition: tds[1], bl: tds[2], palettes: tds[3] });
       }
-      return res.status(200).json({ rows });
+      return res.status(200).json({ rows: rows });
 
     } else if (action === 'bl' && pk) {
       const resp = await fetch(BASE + '/systemeu/raw_u20/' + pk + '/', { headers });
       if (!resp.ok) return res.status(200).json({ error: 'HTTP ' + resp.status });
       const text = await resp.text();
       try {
-        const json = JSON.parse(text);
-        return res.status(200).json(json);
+        return res.status(200).json(JSON.parse(text));
       } catch (e) {
         return res.status(200).json({ error: 'Réponse non-JSON', preview: text.substring(0, 200) });
       }
 
     } else if (action === 'products') {
-      const searchHeaders = {
+      var searchHeaders = {
         'Authorization': 'Token ' + apiToken,
         'Content-Type': 'application/json;charset=UTF-8',
         'User-Agent': 'Mozilla/5.0',
       };
 
-      let allProducts = [];
-      let page = 1;
-      let totalFound = 0;
-      let lastError = null;
+      var allProducts = [];
+      var page = 1;
+      var totalFound = 0;
+      var lastError = null;
 
       while (page <= 10) {
-        let resp;
+        var resp2;
         try {
-          resp = await fetch('https://search.deleev.com/staff/', {
+          resp2 = await fetch('https://search.deleev.com/staff/', {
             method: 'POST',
             headers: searchHeaders,
             body: JSON.stringify({
@@ -79,25 +78,26 @@ export default async function handler(req, res) {
           break;
         }
 
-        if (!resp.ok) {
-          const t = await resp.text().catch(() => '');
-          lastError = 'API ' + resp.status + ' page ' + page + ': ' + t.substring(0, 200);
+        if (!resp2.ok) {
+          var t = '';
+          try { t = await resp2.text(); } catch(e) {}
+          lastError = 'API ' + resp2.status + ' page ' + page + ': ' + t.substring(0, 200);
           break;
         }
 
-        let data;
+        var data;
         try {
-          data = await resp.json();
+          data = await resp2.json();
         } catch (jsonErr) {
           lastError = 'JSON parse error page ' + page;
           break;
         }
 
         totalFound = data.found || totalFound;
-        const hits = data.hits || [];
+        var hits = data.hits || [];
 
-        for (let i = 0; i < hits.length; i++) {
-          const d = hits[i].document || hits[i];
+        for (var i = 0; i < hits.length; i++) {
+          var d = hits[i].document || hits[i];
           allProducts.push({
             id: d.id || 0,
             name: d.selling_name || d.name || '',
@@ -130,6 +130,6 @@ export default async function handler(req, res) {
       return res.status(200).json({ error: 'action=list, action=bl&pk=XXX, ou action=products' });
     }
   } catch (globalErr) {
-    return res.status(200).json({ error: 'Crash: ' + globalErr.message, stack: globalErr.stack ? globalErr.stack.substring(0, 300) : '' });
+    return res.status(200).json({ error: 'Crash: ' + globalErr.message });
   }
-}
+};
