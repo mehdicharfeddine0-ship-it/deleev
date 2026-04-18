@@ -230,6 +230,10 @@ td{padding:9px 10px;vertical-align:middle;}
 .u-bl-item{font-family:'Geist Mono',monospace;font-size:11px;padding:7px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:4px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;background:var(--surface);transition:all .12s;text-align:left;}
 .u-bl-item:hover{border-color:var(--ok);background:var(--surface2);}
 .u-bl-item.loading{opacity:.5;pointer-events:none;}
+.u-bl-item.selected{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 8%,transparent);}
+.u-bl-item .u-check{width:16px;height:16px;border:1.5px solid var(--border);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .12s;margin-right:8px;font-size:10px;color:transparent;}
+.u-bl-item.selected .u-check{border-color:var(--ok);background:var(--ok);color:#000;}
+.u-merge-bar{display:flex;gap:8px;align-items:center;padding:8px 10px;background:color-mix(in srgb,var(--ok) 8%,transparent);border:1px solid color-mix(in srgb,var(--ok) 25%,transparent);border-radius:8px;margin-bottom:8px;}
 </style>
 </head>
 <body>
@@ -1451,8 +1455,10 @@ let uNbPrep=2,uCph=80,uTStart='06:00',uTEnd='';
 let uParsed=null; // parsed JSON data
 
 const U_PROXY='/api/su';
+let uSelectedBLs=new Set(); // pks selected for merge
+let uBLRows=[]; // cached list from API
 
-// Fetch list of BLs via proxy
+// Fetch list of BLs via proxy — filtered to 0216* only
 async function uFetchList(){
   const status=document.getElementById('uFetchStatus');
   const listEl=document.getElementById('uBLList');
@@ -1460,6 +1466,7 @@ async function uFetchList(){
   status.textContent='Chargement de la liste des BL…';
   status.style.color='var(--units)';
   listEl.style.display='none';
+  uSelectedBLs.clear();
 
   try{
     const resp=await fetch(U_PROXY+'?action=list');
@@ -1475,20 +1482,18 @@ async function uFetchList(){
       return;
     }
 
-    const display=data.rows.slice(0,25);
-    status.textContent=display.length+' bon(s) de livraison';
+    // Filter: only BLs starting with 0216 (Système U frais)
+    uBLRows=data.rows.filter(r=>r.bl&&r.bl.startsWith('0216'));
+
+    if(!uBLRows.length){
+      status.textContent='Aucun BL Système U frais (0216*) trouvé parmi '+data.rows.length+' BL.';
+      status.style.color='var(--warn)';
+      return;
+    }
+
+    status.textContent=uBLRows.length+' BL Système U frais';
     status.style.color='var(--ok)';
-    listEl.style.display='block';
-    listEl.innerHTML=display.map(r=>{
-      return`<div class="u-bl-item" onclick="uFetchBL('${r.pk}','${r.bl}')">
-        <div style="text-align:left">
-          <div style="font-weight:600;color:var(--text)">BL ${r.bl}</div>
-          <div style="font-size:9px;color:var(--text3)">${r.livraison} · ${r.palettes} pal.</div>
-          <div style="font-size:9px;color:var(--text3)">Exp. ${r.expedition}</div>
-        </div>
-        <span style="color:var(--ok);font-size:10px">Charger →</span>
-      </div>`;
-    }).join('');
+    uRenderBLList(listEl);
 
   }catch(err){
     status.textContent='❌ '+err.message;
@@ -1496,7 +1501,110 @@ async function uFetchList(){
   }
 }
 
-// Fetch a specific BL JSON via proxy
+function uRenderBLList(listEl){
+  if(!listEl)listEl=document.getElementById('uBLList');
+  listEl.style.display='block';
+
+  // Merge bar (shown when 2+ selected)
+  let mergeHtml='';
+  if(uSelectedBLs.size>=2){
+    const selNames=[...uSelectedBLs].map(pk=>{const r=uBLRows.find(x=>x.pk===pk);return r?r.bl:pk;}).join(' + ');
+    mergeHtml=`<div class="u-merge-bar">
+      <span style="font-size:11px;color:var(--ok);font-weight:600">🔗 ${uSelectedBLs.size} BL sélectionnés</span>
+      <span style="font-size:9px;color:var(--text2);flex:1">${selNames}</span>
+      <button class="ebtn" onclick="uMergeBLs()" style="font-size:10px;padding:4px 12px">Fusionner et charger →</button>
+    </div>`;
+  }else if(uSelectedBLs.size===1){
+    mergeHtml=`<div class="u-merge-bar">
+      <span style="font-size:11px;color:var(--text2)">1 BL sélectionné — sélectionnez-en un 2ème pour fusionner, ou :</span>
+      <button class="ebtn" onclick="uLoadSingleSelected()" style="font-size:10px;padding:4px 12px">Charger seul →</button>
+    </div>`;
+  }
+
+  listEl.innerHTML=mergeHtml+uBLRows.slice(0,25).map(r=>{
+    const sel=uSelectedBLs.has(r.pk);
+    // Parse date from livraison (format: "18/04/2026 à 11:46")
+    const dateMatch=r.livraison.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    const dateStr=dateMatch?`${dateMatch[1]}/${dateMatch[2]}/${dateMatch[3]}`:'';
+    const timeMatch=r.livraison.match(/(\d{2}:\d{2})/);
+    const timeStr=timeMatch?timeMatch[1]:'';
+
+    return`<div class="u-bl-item${sel?' selected':''}" onclick="uToggleBL('${r.pk}')">
+      <div style="display:flex;align-items:center;gap:0">
+        <div class="u-check">${sel?'✓':''}</div>
+        <div>
+          <div style="font-weight:600;color:var(--text)">${r.bl}</div>
+          <div style="font-size:9px;color:var(--text3)">📅 ${dateStr} ${timeStr} · ${r.palettes} palettes</div>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:10px;color:var(--text2)">${r.palettes} pal.</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function uToggleBL(pk){
+  if(uSelectedBLs.has(pk))uSelectedBLs.delete(pk);
+  else uSelectedBLs.add(pk);
+  uRenderBLList();
+}
+
+function uLoadSingleSelected(){
+  const pk=[...uSelectedBLs][0];
+  const r=uBLRows.find(x=>x.pk===pk);
+  uFetchBL(pk,r?.bl||pk);
+}
+
+// Fetch and merge multiple BLs
+async function uMergeBLs(){
+  const pks=[...uSelectedBLs];
+  const status=document.getElementById('uFetchStatus');
+  const bls=pks.map(pk=>{const r=uBLRows.find(x=>x.pk===pk);return r?.bl||pk;});
+  status.textContent='Fusion de '+pks.length+' BL : '+bls.join(' + ')+'…';
+  status.style.color='var(--units)';
+  document.querySelectorAll('.u-bl-item').forEach(it=>it.style.opacity='.4');
+
+  try{
+    const jsons=[];
+    for(const pk of pks){
+      const resp=await fetch(U_PROXY+'?action=bl&pk='+pk);
+      const json=await resp.json();
+      if(!resp.ok||json.error)throw new Error('BL '+pk+': '+(json.error||'Erreur'));
+      jsons.push(json);
+    }
+
+    // Merge: combine supportsDeLivraison and lignesLivraison
+    const merged={
+      idBonDeLivraison:bls.join(' + '),
+      expedition:jsons[0].expedition,
+      livraisonPrevue:jsons[0].livraisonPrevue,
+      supportsDeLivraison:[],
+      lignesLivraison:[]
+    };
+    jsons.forEach(j=>{
+      if(j.supportsDeLivraison)merged.supportsDeLivraison.push(...j.supportsDeLivraison);
+      if(j.lignesLivraison)merged.lignesLivraison.push(...j.lignesLivraison);
+    });
+
+    DU=merged;
+    document.getElementById('fUname').textContent='✓ '+bls.join(' + ')+' (fusionnés)';
+    document.getElementById('fUname').style.display='block';
+    document.getElementById('dzU').style.borderColor='var(--ok)';
+    const totalColis=merged.supportsDeLivraison.reduce((s,p)=>s+p.nbColisSurSupport,0);
+    status.textContent='✅ '+bls.join(' + ')+' — '+merged.lignesLivraison.length+' réfs · '+merged.supportsDeLivraison.length+' pal. · '+totalColis+' colis';
+    status.style.color='var(--ok)';
+    document.getElementById('uBLList').style.display='none';
+    uSelectedBLs.clear();
+    checkReady();
+  }catch(err){
+    status.textContent='❌ '+err.message;
+    status.style.color='var(--rupture)';
+    document.querySelectorAll('.u-bl-item').forEach(it=>it.style.opacity='1');
+  }
+}
+
+// Fetch a single BL JSON via proxy
 async function uFetchBL(pk,bl){
   const status=document.getElementById('uFetchStatus');
   status.textContent='Chargement du BL '+(bl||pk)+'…';
@@ -1519,6 +1627,7 @@ async function uFetchBL(pk,bl){
     status.textContent='✅ BL '+(bl||pk)+' — '+((json.lignesLivraison||[]).length)+' réfs · '+((json.supportsDeLivraison||[]).length)+' palettes';
     status.style.color='var(--ok)';
     document.getElementById('uBLList').style.display='none';
+    uSelectedBLs.clear();
     checkReady();
   }catch(err){
     status.textContent='❌ '+err.message;
