@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="fr" data-theme="dark">
 <head>
@@ -1451,6 +1452,7 @@ let uNbPrep=2,uCph=80,uTStart='06:00',uTEnd='';
 let uParsed=null; // parsed JSON data
 
 const U_ADMIN_BASE='https://admin.deleev.com';
+const U_LIST_URL=U_ADMIN_BASE+'/systemeu/delivery_notes/';
 
 // Fetch list of delivery notes from admin
 async function uFetchList(){
@@ -1460,109 +1462,120 @@ async function uFetchList(){
   status.textContent='Chargement de la liste des BL…';
   status.style.color='var(--units)';
   listEl.style.display='none';
+
+  // First, check if we have data from bookmarklet in localStorage
+  const cached=localStorage.getItem('u_bl_list');
+  if(cached){
+    try{
+      const data=JSON.parse(cached);
+      if(data.ts&&Date.now()-data.ts<3600000){ // valid for 1 hour
+        uShowBLList(data.rows,status,listEl,'(depuis cache bookmarklet)');
+        return;
+      }
+    }catch(e){}
+    localStorage.removeItem('u_bl_list');
+  }
+
   try{
-    const resp=await fetch(U_ADMIN_BASE+'/systemeu/delivery_note/',{credentials:'include'});
-    if(!resp.ok)throw new Error('HTTP '+resp.status+' — Êtes-vous connecté à admin.deleev.com ?');
+    const resp=await fetch(U_LIST_URL,{credentials:'include'});
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
     const html=await resp.text();
-    // Parse the delivery note list page to extract BL IDs and info
-    const parser=new DOMParser();
-    const doc=parser.parseFromString(html,'text/html');
-    // Look for table rows or links with delivery note IDs
-    const rows=[];
-    // Try to find links to delivery_note/{id}/
-    const links=doc.querySelectorAll('a[href*="/systemeu/delivery_note/"]');
-    const seen=new Set();
-    links.forEach(a=>{
-      const m=a.href.match(/delivery_note\/(\d+)/);
-      if(m&&!seen.has(m[1])){
-        seen.add(m[1]);
-        // Try to extract info from the row
-        const tr=a.closest('tr');
-        let info=a.textContent.trim();
-        let date='',bl='';
-        if(tr){
-          const tds=tr.querySelectorAll('td');
-          const texts=[...tds].map(td=>td.textContent.trim());
-          info=texts.join(' · ');
-          // Try to extract the BL number and date
-          bl=texts[0]||m[1];
-          date=texts.find(t=>/\d{4}-\d{2}-\d{2}/.test(t)||/\d{2}\/\d{2}\/\d{4}/.test(t))||'';
-        }
-        rows.push({id:m[1],bl,date,info});
-      }
-    });
-    // Also try raw_u20 links
-    const rawLinks=doc.querySelectorAll('a[href*="/systemeu/raw_u20/"]');
-    rawLinks.forEach(a=>{
-      const m=a.href.match(/raw_u20\/(\d+)/);
-      if(m&&!seen.has(m[1])){
-        seen.add(m[1]);
-        const tr=a.closest('tr');
-        let bl=m[1],date='';
-        if(tr){
-          const tds=tr.querySelectorAll('td');
-          bl=tds[0]?.textContent.trim()||m[1];
-          date=[...tds].map(td=>td.textContent.trim()).find(t=>/\d{4}/.test(t))||'';
-        }
-        rows.push({id:m[1],bl,date,info:''});
-      }
-    });
+    const rows=uParseDeliveryNotesPage(html);
 
     if(!rows.length){
-      // Maybe the page structure is different — try a simpler regex approach on the raw HTML
-      const regex=/raw_u20\/(\d+)/g;
-      let match;
-      while((match=regex.exec(html))!==null){
-        if(!seen.has(match[1])){
-          seen.add(match[1]);
-          rows.push({id:match[1],bl:'BL #'+match[1],date:'',info:''});
-        }
-      }
-      // Also try delivery_note links
-      const regex2=/delivery_note\/(\d+)/g;
-      while((match=regex2.exec(html))!==null){
-        if(!seen.has(match[1])){
-          seen.add(match[1]);
-          rows.push({id:match[1],bl:'BL #'+match[1],date:'',info:''});
-        }
-      }
-    }
-
-    if(!rows.length){
-      status.textContent='Aucun BL trouvé. Vérifiez que vous êtes connecté sur admin.deleev.com';
+      status.textContent='Aucun BL trouvé. Vérifiez votre connexion admin.';
       status.style.color='var(--warn)';
       return;
     }
-
-    // Show max 20 most recent
-    const display=rows.slice(0,20);
-    status.textContent=display.length+' bon(s) de livraison trouvé(s)';
-    status.style.color='var(--ok)';
-    listEl.style.display='block';
-    listEl.innerHTML=display.map(r=>`
-      <div class="u-bl-item" id="ubl-${r.id}" onclick="uFetchBL('${r.id}')">
-        <div>
-          <div style="font-weight:600;color:var(--text)">${r.bl||'BL #'+r.id}</div>
-          ${r.date?`<div style="font-size:9px;color:var(--text3)">${r.date}</div>`:''}
-        </div>
-        <span style="color:var(--ok);font-size:10px">Charger →</span>
-      </div>
-    `).join('');
-
-    // Stop the drop zone click from propagating to file picker
-    listEl.addEventListener('click',e=>e.stopPropagation());
+    uShowBLList(rows,status,listEl,'');
 
   }catch(err){
-    status.textContent='Erreur: '+err.message;
     status.style.color='var(--rupture)';
-    // If CORS error, suggest opening in admin domain
-    if(err.message.includes('Failed to fetch')||err.message.includes('NetworkError')){
-      status.innerHTML='⚠️ Impossible de joindre l\'admin. <br>Ouvrez d\'abord <a href="'+U_ADMIN_BASE+'/systemeu/delivery_note/" target="_blank" style="color:var(--units)">admin.deleev.com</a> dans un autre onglet et connectez-vous, puis réessayez.<br><span style="color:var(--text3);font-size:9px">Ou bien, copiez cette page HTML dans admin.deleev.com via une extension userscript.</span>';
-    }
+    // CORS or network error — show bookmarklet solution
+    const bookmarkletCode=`javascript:void(function(){var t=document.querySelectorAll('table tr'),r=[];for(var i=1;i<t.length;i++){var c=t[i].querySelectorAll('td');if(c.length>=4){var a=t[i].querySelector('a[href*=raw_u20]');var pk=a?a.href.match(/raw_u20\\/(\\d+)/):null;if(!pk){a=t[i].querySelector('a[href*=delivery_notes]');pk=a?a.href.match(/delivery_notes\\/(\\d+)/):[null,c[2].textContent.trim()];}r.push({pk:pk?pk[1]:'',livraison:c[0].textContent.trim(),expedition:c[1].textContent.trim(),bl:c[2].textContent.trim(),palettes:c[3].textContent.trim()});}}localStorage.setItem('u_bl_list',JSON.stringify({ts:Date.now(),rows:r}));alert('✅ '+r.length+' BL capturés ! Retournez sur votre dashboard.');})()`;
+
+    status.innerHTML=`⚠️ CORS bloqué depuis ${location.hostname}
+      <div style="margin-top:8px;font-size:10px;color:var(--text2);line-height:1.8">
+        <strong style="color:var(--text)">Solution 1 — Bookmarklet</strong> (recommandé) :<br>
+        Glissez ce lien dans votre barre de favoris → <a href="${bookmarkletCode}" style="color:var(--ok);background:color-mix(in srgb,var(--ok) 12%,transparent);border:1px solid color-mix(in srgb,var(--ok) 30%,transparent);padding:3px 10px;border-radius:5px;text-decoration:none;cursor:grab" onclick="event.preventDefault();alert('Glissez ce bouton dans votre barre de favoris !\\nPuis allez sur admin.deleev.com/systemeu/delivery_notes/ et cliquez dessus.')">📦 Capturer BL</a><br>
+        Puis ouvrez <a href="${U_LIST_URL}" target="_blank" style="color:var(--units)">admin.deleev.com</a>, cliquez sur le bookmarklet, et revenez ici.<br><br>
+        <strong style="color:var(--text)">Solution 2 — Saisie manuelle</strong> :<br>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+          <input id="uManualPK" placeholder="ID du raw_u20 (ex: 8189)" style="font-family:'Geist Mono',monospace;font-size:11px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 10px;border-radius:6px;outline:none;width:200px" onkeydown="if(event.key==='Enter')uFetchBLManual()">
+          <button class="ebtn" onclick="uFetchBLManual()" style="font-size:10px;padding:4px 10px">Charger</button>
+        </div>
+        <div style="margin-top:4px;color:var(--text3);font-size:9px">Trouvez l'ID dans l'URL : admin.deleev.com/systemeu/raw_u20/<strong style="color:var(--warn)">8189</strong>/</div>
+      </div>`;
   }
 }
 
-// Fetch a specific delivery note JSON
+// Parse the delivery_notes HTML page
+function uParseDeliveryNotesPage(html){
+  const parser=new DOMParser();
+  const doc=parser.parseFromString(html,'text/html');
+  const rows=[];
+  const trs=doc.querySelectorAll('table tr');
+  for(let i=1;i<trs.length;i++){
+    const tds=trs[i].querySelectorAll('td');
+    if(tds.length<4)continue;
+    // Columns: Livraison prévue | Expédition | ID bon de livraison | Nombre de palettes | Détail
+    const livraison=tds[0]?.textContent.trim()||'';
+    const expedition=tds[1]?.textContent.trim()||'';
+    const bl=tds[2]?.textContent.trim()||'';
+    const palettes=tds[3]?.textContent.trim()||'';
+    // Find the pk from the Détail link
+    let pk='';
+    const detailLink=trs[i].querySelector('a');
+    if(detailLink){
+      const m=detailLink.href.match(/delivery_notes\/(\d+)/)||detailLink.href.match(/raw_u20\/(\d+)/);
+      if(m)pk=m[1];
+    }
+    // Also try to find raw_u20 link
+    const rawLink=trs[i].querySelector('a[href*="raw_u20"]');
+    let rawPk='';
+    if(rawLink){const m=rawLink.href.match(/raw_u20\/(\d+)/);if(m)rawPk=m[1];}
+
+    if(pk||rawPk||bl){
+      rows.push({pk:rawPk||pk,livraison,expedition,bl,palettes});
+    }
+  }
+
+  // Fallback: regex on raw HTML
+  if(!rows.length){
+    const seen=new Set();
+    let match;
+    const regex=/raw_u20\/(\d+)/g;
+    while((match=regex.exec(html))!==null){
+      if(!seen.has(match[1])){seen.add(match[1]);rows.push({pk:match[1],livraison:'',expedition:'',bl:'',palettes:''});}
+    }
+    const regex2=/delivery_notes\/(\d+)/g;
+    while((match=regex2.exec(html))!==null){
+      if(!seen.has(match[1])){seen.add(match[1]);rows.push({pk:match[1],livraison:'',expedition:'',bl:'',palettes:''});}
+    }
+  }
+  return rows;
+}
+
+function uShowBLList(rows,status,listEl,suffix){
+  const display=rows.slice(0,20);
+  status.textContent=display.length+' bon(s) de livraison '+suffix;
+  status.style.color='var(--ok)';
+  listEl.style.display='block';
+  listEl.innerHTML=display.map(r=>{
+    const id=r.pk||r.bl;
+    return`<div class="u-bl-item" id="ubl-${id}" onclick="uFetchBL('${id}')">
+      <div style="text-align:left">
+        <div style="font-weight:600;color:var(--text)">BL ${r.bl||r.pk}</div>
+        <div style="font-size:9px;color:var(--text3)">${r.livraison}${r.palettes?' · '+r.palettes+' pal.':''}</div>
+        ${r.expedition?`<div style="font-size:9px;color:var(--text3)">Exp. ${r.expedition}</div>`:''}
+      </div>
+      <span style="color:var(--ok);font-size:10px">Charger →</span>
+    </div>`;
+  }).join('');
+  listEl.addEventListener('click',e=>e.stopPropagation());
+}
+
+// Fetch a specific delivery note JSON by its raw_u20 PK
 async function uFetchBL(id){
   const item=document.getElementById('ubl-'+id);
   if(item)item.classList.add('loading');
@@ -1588,6 +1601,33 @@ async function uFetchBL(id){
     if(item)item.classList.remove('loading');
   }
 }
+
+// Manual PK entry fallback
+async function uFetchBLManual(){
+  const inp=document.getElementById('uManualPK');
+  if(!inp)return;
+  const pk=inp.value.trim();
+  if(!pk){alert('Entrez un ID de raw_u20');return;}
+  await uFetchBL(pk);
+}
+
+// On page load, check if bookmarklet left data
+(function(){
+  const cached=localStorage.getItem('u_bl_list');
+  if(cached){
+    try{
+      const data=JSON.parse(cached);
+      if(data.ts&&Date.now()-data.ts<3600000&&data.rows?.length){
+        // Show a small indicator on the drop zone
+        const status=document.getElementById('uFetchStatus');
+        if(status){
+          status.style.display='block';
+          status.innerHTML='<span style="color:var(--ok)">📦 '+data.rows.length+' BL en cache</span> — <a href="#" onclick="event.preventDefault();event.stopPropagation();uFetchList()" style="color:var(--units)">Afficher</a>';
+        }
+      }
+    }catch(e){}
+  }
+})();
 
 const U_PAL_COLORS=['#3b82f6','#8b5cf6','#06b6d4','#f59e0b','#ec4899','#10b981','#f97316','#6366f1','#14b8a6','#e11d48','#84cc16','#a855f7'];
 function uPalColor(id){let h=0;for(let i=0;i<id.length;i++)h=((h<<5)-h+id.charCodeAt(i))|0;return U_PAL_COLORS[Math.abs(h)%U_PAL_COLORS.length];}
@@ -1977,3 +2017,4 @@ let _lastProdCSV=null;
 </script>
 </body>
 </html>
+
