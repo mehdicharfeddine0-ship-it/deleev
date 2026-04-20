@@ -276,7 +276,14 @@ td{padding:9px 10px;vertical-align:middle;}
       <input type="file" id="fU" accept=".json">
       <div class="file-ok" id="fUname" style="display:none"></div>
       <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px" onclick="event.stopPropagation()">
-        <button class="ebtn" id="btnFetchU" onclick="uFetchList()" style="font-size:11px;padding:6px 14px">🔄 Charger les BL</button>
+        <div style="display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap">
+          <button class="ebtn" id="btnFetchU" onclick="uFetchList()" style="font-size:11px;padding:6px 14px">🔄 Charger les BL</button>
+          <span style="color:var(--text3);font-size:11px">ou</span>
+          <div style="display:flex;gap:4px;align-items:center">
+            <input id="uSearchCmd" type="text" placeholder="N° commande" style="font-family:'Geist Mono',monospace;font-size:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;outline:none;width:110px" onkeydown="if(event.key==='Enter')uSearchCommande()">
+            <button class="ebtn" onclick="uSearchCommande()" style="font-size:10px;padding:5px 10px">🔍</button>
+          </div>
+        </div>
         <div id="uFetchStatus" style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);margin-top:6px;display:none"></div>
         <div id="uBLList" style="margin-top:8px;display:none;max-height:250px;overflow-y:auto"></div>
       </div>
@@ -1625,10 +1632,13 @@ async function uFetchBL(pk,bl){
       return;
     }
     DU=json;
-    document.getElementById('fUname').textContent='✓ BL '+(bl||pk);
+    // Extract commande numbers
+    const cmds=[...new Set((json.lignesLivraison||[]).map(l=>l.numCommandeEmetteur).filter(Boolean))];
+    const cmdStr=cmds.length?'Cde: '+cmds.join(', '):'';
+    document.getElementById('fUname').textContent='✓ BL '+(bl||pk)+(cmdStr?' · '+cmdStr:'');
     document.getElementById('fUname').style.display='block';
     document.getElementById('dzU').style.borderColor='var(--ok)';
-    status.textContent='✅ BL '+(bl||pk)+' — '+((json.lignesLivraison||[]).length)+' réfs · '+((json.supportsDeLivraison||[]).length)+' palettes';
+    status.textContent='✅ BL '+(bl||pk)+' — '+((json.lignesLivraison||[]).length)+' réfs · '+((json.supportsDeLivraison||[]).length)+' pal.'+(cmdStr?' · '+cmdStr:'');
     status.style.color='var(--ok)';
     document.getElementById('uBLList').style.display='none';
     uSelectedBLs.clear();
@@ -1637,6 +1647,69 @@ async function uFetchBL(pk,bl){
     status.textContent='❌ '+err.message;
     status.style.color='var(--rupture)';
     document.querySelectorAll('.u-bl-item').forEach(it=>it.style.opacity='1');
+  }
+}
+
+// Search BL by commande number
+async function uSearchCommande(){
+  const inp=document.getElementById('uSearchCmd');
+  const q=(inp?.value||'').trim();
+  if(!q){alert('Entrez un numéro de commande');return;}
+
+  const status=document.getElementById('uFetchStatus');
+  const listEl=document.getElementById('uBLList');
+  status.style.display='block';
+  status.textContent='Recherche de la commande '+q+'…';
+  status.style.color='var(--units)';
+  listEl.style.display='none';
+
+  try{
+    // First get the BL list if not cached
+    if(!uBLRows.length){
+      const resp=await fetch(U_PROXY+'?action=list');
+      const data=await resp.json();
+      if(data.rows?.length)uBLRows=data.rows;
+    }
+    if(!uBLRows.length){
+      status.textContent='❌ Impossible de charger la liste des BL';
+      status.style.color='var(--rupture)';
+      return;
+    }
+
+    // Search through BLs (most recent first) — check each one
+    const maxSearch=Math.min(uBLRows.length,30);
+    let found=false;
+    for(let i=0;i<maxSearch;i++){
+      const r=uBLRows[i];
+      status.textContent='🔍 Commande '+q+' — vérification BL '+r.bl+' ('+(i+1)+'/'+maxSearch+')…';
+      try{
+        const resp=await fetch(U_PROXY+'?action=bl&pk='+r.pk);
+        const json=await resp.json();
+        if(json.error)continue;
+        const cmds=[...new Set((json.lignesLivraison||[]).map(l=>String(l.numCommandeEmetteur)).filter(Boolean))];
+        if(cmds.includes(q)||cmds.some(c=>c.includes(q))){
+          // Found it!
+          DU=json;
+          const cmdStr='Cde: '+cmds.join(', ');
+          document.getElementById('fUname').textContent='✓ BL '+r.bl+' · '+cmdStr;
+          document.getElementById('fUname').style.display='block';
+          document.getElementById('dzU').style.borderColor='var(--ok)';
+          status.textContent='✅ Commande '+q+' trouvée dans BL '+r.bl+' — '+((json.lignesLivraison||[]).length)+' réfs · '+((json.supportsDeLivraison||[]).length)+' pal.';
+          status.style.color='var(--ok)';
+          found=true;
+          checkReady();
+          break;
+        }
+      }catch(e){continue;}
+    }
+
+    if(!found){
+      status.textContent='❌ Commande '+q+' non trouvée dans les '+maxSearch+' derniers BL';
+      status.style.color='var(--rupture)';
+    }
+  }catch(err){
+    status.textContent='❌ '+err.message;
+    status.style.color='var(--rupture)';
   }
 }
 
