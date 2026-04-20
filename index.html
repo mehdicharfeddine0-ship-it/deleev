@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ventes & Produits · Commandes Frais</title>
+<title>Dashboard Frais</title>
 <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;600&family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 [data-theme="dark"]{--bg:#0d0d0d;--surface:#141414;--surface2:#1c1c1c;--surface3:#242424;--border:#2a2a2a;--border2:#222;--text:#f2f2f2;--text2:#a0a0a0;--text3:#606060;--ca:#f0e040;--units:#40c8f0;--promo:#c084fc;--rupture:#f87171;--ok:#4ade80;--warn:#fb923c;--blue:#60a5fa;--shadow:0 1px 3px rgba(0,0,0,.6);}
@@ -243,8 +243,8 @@ td{padding:9px 10px;vertical-align:middle;}
 
 <div id="drop">
   <div style="text-align:center">
-    <div class="drop-title">Ventes <em>&</em> Produits</div>
-    <div class="drop-sub" style="margin-top:6px">Analyse ventes quotidiennes, fiches produits et planning commandes frais</div>
+    <div class="drop-title">Dashboard <em>Frais</em></div>
+    <div class="drop-sub" style="margin-top:6px">Ventes · Produits · Commandes · Système U</div>
   </div>
   <div class="drop-zones">
     <div class="drop-zone" id="dzV">
@@ -271,6 +271,10 @@ td{padding:9px 10px;vertical-align:middle;}
       <div class="drop-text">Glisse l'export <strong>CSV commandes</strong><br>ou clique pour choisir</div>
       <input type="file" id="fC" accept=".csv">
       <div class="file-ok" id="fCname" style="display:none"></div>
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px" onclick="event.stopPropagation()">
+        <button class="ebtn" onclick="uFetchCommandes()" style="font-size:10px;padding:5px 12px;border-color:color-mix(in srgb,var(--units) 40%,transparent);color:var(--units);background:color-mix(in srgb,var(--units) 8%,transparent)">❄ Charger commandes</button>
+        <div id="uCmdStatus" style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--text3);margin-top:4px;display:none"></div>
+      </div>
     </div>
     <div class="drop-zone-u" id="dzU">
       <div class="dz-label" style="color:var(--ok)">🧊 Système U frais</div>
@@ -298,7 +302,7 @@ td{padding:9px 10px;vertical-align:middle;}
 
 <div id="dash">
   <div class="topbar">
-    <div><div class="brand">Ventes <em>&</em> Produits <span class="supplier-tag" id="supplierTag" style="display:none"></span></div><div class="meta" id="topMeta">—</div></div>
+    <div><div class="brand">Dashboard <em>Frais</em> <span class="supplier-tag" id="supplierTag" style="display:none"></span></div><div class="meta" id="topMeta">—</div></div>
     <div class="tabs">
       <button class="tab active" id="tabV" onclick="switchTab('v')">📊 Ventes</button>
       <button class="tab" id="tabP" onclick="switchTab('p')">📦 Produits</button>
@@ -1725,6 +1729,41 @@ async function uSearchCommande(){
       status.textContent='❌ Commande '+q+' non trouvée dans les '+maxSearch+' derniers BL';
       status.style.color='var(--rupture)';
     }
+  }catch(err){
+    status.textContent='❌ '+err.message;
+    status.style.color='var(--rupture)';
+  }
+}
+
+// Fetch commandes CSV via proxy
+async function uFetchCommandes(){
+  const status=document.getElementById('uCmdStatus');
+  status.style.display='block';
+  status.textContent='Chargement des commandes…';
+  status.style.color='var(--units)';
+
+  try{
+    const resp=await fetch(U_PROXY+'?action=commandes');
+    const data=await resp.json();
+    if(data.error){
+      status.textContent='❌ '+data.error;
+      status.style.color='var(--rupture)';
+      return;
+    }
+    if(!data.csv){
+      status.textContent='❌ Pas de CSV reçu';
+      status.style.color='var(--rupture)';
+      return;
+    }
+
+    // Parse the CSV as if it was uploaded
+    DC=parseCommandes(data.csv);
+    document.getElementById('fCname').textContent='✓ '+DC.length+' fournisseurs frais (via API)';
+    document.getElementById('fCname').style.display='block';
+    document.getElementById('dzC').style.borderColor='var(--units)';
+    status.textContent='✅ '+DC.length+' fournisseurs chargés';
+    status.style.color='var(--ok)';
+    checkReady();
   }catch(err){
     status.textContent='❌ '+err.message;
     status.style.color='var(--rupture)';
