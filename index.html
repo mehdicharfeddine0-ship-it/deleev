@@ -1676,11 +1676,17 @@ async function uSearchCommande(){
       return;
     }
 
-    // Search through BLs (most recent first) — check each one
-    const maxSearch=Math.min(uBLRows.length,30);
+    // Search only through BLs starting with 0216 (Système U frais)
+    const fraisBLs=uBLRows.filter(r=>r.bl&&r.bl.startsWith('0216'));
+    const maxSearch=Math.min(fraisBLs.length,30);
+    if(!maxSearch){
+      status.textContent='❌ Aucun BL frais (0216*) trouvé';
+      status.style.color='var(--rupture)';
+      return;
+    }
     let found=false;
     for(let i=0;i<maxSearch;i++){
-      const r=uBLRows[i];
+      const r=fraisBLs[i];
       status.textContent='🔍 Commande '+q+' — vérification BL '+r.bl+' ('+(i+1)+'/'+maxSearch+')…';
       try{
         const resp=await fetch(U_PROXY+'?action=bl&pk='+r.pk);
