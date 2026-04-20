@@ -41,7 +41,7 @@ module.exports = async function handler(req, res) {
       if (!detailResp.ok) return res.status(200).json({ error: 'delivery_note HTTP ' + detailResp.status });
       var detailHtml = await detailResp.text();
       var rawMatch = detailHtml.match(/raw_u20\/(\d+)/);
-      if (!rawMatch) return res.status(200).json({ error: 'Lien raw_u20 non trouvé dans delivery_note/' + pk });
+      if (!rawMatch) return res.status(200).json({ error: 'Lien raw_u20 non trouvé' });
       var rawPk = rawMatch[1];
       var resp2 = await fetch(BASE + '/systemeu/raw_u20/' + rawPk + '/', { headers });
       if (!resp2.ok) return res.status(200).json({ error: 'raw_u20 HTTP ' + resp2.status });
@@ -49,8 +49,37 @@ module.exports = async function handler(req, res) {
       try { return res.status(200).json(JSON.parse(text)); }
       catch (e) { return res.status(200).json({ error: 'Réponse non-JSON' }); }
 
-    } else if (action === 'products') {
+    } else if (action === 'debug') {
       var resp3 = await fetch('https://search.deleev.com/staff/', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Token ' + apiToken,
+          'Content-Type': 'application/json;charset=UTF-8',
+          'User-Agent': 'Mozilla/5.0',
+        },
+        body: JSON.stringify({
+          indexName: 'prod_products',
+          q: '*',
+          perPage: 2,
+          page: 1,
+          queryBy: 'selling_name,primeur_origin',
+          filterBy: 'supplierreferences.supplier:=192',
+          sortBy: 'updated_at_timestamp:desc'
+        })
+      });
+      var data3 = await resp3.json();
+      var hit = data3.hits && data3.hits[0] ? (data3.hits[0].document || data3.hits[0]) : null;
+      if (!hit) return res.status(200).json({ error: 'No hits' });
+
+      return res.status(200).json({
+        id: hit.id,
+        name: hit.selling_name,
+        supplierreference_set: hit.supplierreference_set || 'NOT_FOUND',
+        supplierreferences: hit.supplierreferences || 'NOT_FOUND',
+      });
+
+    } else if (action === 'products') {
+      var resp4 = await fetch('https://search.deleev.com/staff/', {
         method: 'POST',
         headers: {
           'Authorization': 'Token ' + apiToken,
@@ -68,13 +97,13 @@ module.exports = async function handler(req, res) {
         })
       });
 
-      if (!resp3.ok) {
+      if (!resp4.ok) {
         var errT = '';
-        try { errT = await resp3.text(); } catch(e) {}
-        return res.status(200).json({ error: 'API ' + resp3.status, detail: errT.substring(0, 300) });
+        try { errT = await resp4.text(); } catch(e) {}
+        return res.status(200).json({ error: 'API ' + resp4.status, detail: errT.substring(0, 300) });
       }
 
-      var data = await resp3.json();
+      var data = await resp4.json();
       var hits = data.hits || [];
       var products = [];
       var typoMap = { 1: 'Sec', 2: 'Surgelé', 3: 'Frais', 4: 'Fruits & Légumes' };
@@ -93,18 +122,17 @@ module.exports = async function handler(req, res) {
           for (var j = 0; j < d.supplierreference_set.length; j++) {
             var sr = d.supplierreference_set[j];
             if (sr.supplier === 192 || sr.supplier_id === 192 || String(sr.supplier) === '192') {
-              supplierRef = sr.ref || sr.reference || sr.code || sr.supplier_ref || '';
+              supplierRef = sr.supplier_reference || sr.ref || sr.reference || '';
               break;
             }
           }
         }
-        // Fallback: try supplierreferences
         if (!supplierRef && d.supplierreferences) {
           if (Array.isArray(d.supplierreferences)) {
             for (var k = 0; k < d.supplierreferences.length; k++) {
               var sr2 = d.supplierreferences[k];
               if (sr2.supplier === 192 || String(sr2.supplier) === '192') {
-                supplierRef = sr2.ref || sr2.reference || sr2.code || '';
+                supplierRef = sr2.supplier_reference || sr2.ref || sr2.reference || '';
                 break;
               }
             }
@@ -138,7 +166,7 @@ module.exports = async function handler(req, res) {
       });
 
     } else {
-      return res.status(200).json({ error: 'action=list, action=bl&pk=XXX, ou action=products&page=N' });
+      return res.status(200).json({ error: 'action=list, bl, products, ou debug' });
     }
   } catch (globalErr) {
     return res.status(200).json({ error: 'Crash: ' + globalErr.message });
