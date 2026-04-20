@@ -37,24 +37,17 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ rows: rows });
 
     } else if (action === 'bl' && pk) {
-      // Step 1: fetch the delivery_note detail page to find the real raw_u20 ID
       var detailResp = await fetch(BASE + '/systemeu/delivery_note/' + pk + '/', { headers, redirect: 'follow' });
       if (!detailResp.ok) return res.status(200).json({ error: 'delivery_note HTTP ' + detailResp.status });
       var detailHtml = await detailResp.text();
-
-      // Find the raw_u20 link in the page
       var rawMatch = detailHtml.match(/raw_u20\/(\d+)/);
-      if (!rawMatch) {
-        return res.status(200).json({ error: 'Lien raw_u20 non trouvé dans la page delivery_note/' + pk });
-      }
+      if (!rawMatch) return res.status(200).json({ error: 'Lien raw_u20 non trouvé dans delivery_note/' + pk });
       var rawPk = rawMatch[1];
-
-      // Step 2: fetch the actual JSON from raw_u20
       var resp2 = await fetch(BASE + '/systemeu/raw_u20/' + rawPk + '/', { headers });
       if (!resp2.ok) return res.status(200).json({ error: 'raw_u20 HTTP ' + resp2.status });
       var text = await resp2.text();
       try { return res.status(200).json(JSON.parse(text)); }
-      catch (e) { return res.status(200).json({ error: 'Réponse non-JSON de raw_u20/' + rawPk }); }
+      catch (e) { return res.status(200).json({ error: 'Réponse non-JSON' }); }
 
     } else if (action === 'products') {
       var resp3 = await fetch('https://search.deleev.com/staff/', {
@@ -94,6 +87,30 @@ module.exports = async function handler(req, res) {
         var dlcSale = typeof d.retention_periods === 'number' ? d.retention_periods : null;
         var lifetimeDays = typeof d.lifetime_days === 'number' ? d.lifetime_days : null;
 
+        // Extract supplier ref for supplier 192
+        var supplierRef = '';
+        if (d.supplierreference_set && Array.isArray(d.supplierreference_set)) {
+          for (var j = 0; j < d.supplierreference_set.length; j++) {
+            var sr = d.supplierreference_set[j];
+            if (sr.supplier === 192 || sr.supplier_id === 192 || String(sr.supplier) === '192') {
+              supplierRef = sr.ref || sr.reference || sr.code || sr.supplier_ref || '';
+              break;
+            }
+          }
+        }
+        // Fallback: try supplierreferences
+        if (!supplierRef && d.supplierreferences) {
+          if (Array.isArray(d.supplierreferences)) {
+            for (var k = 0; k < d.supplierreferences.length; k++) {
+              var sr2 = d.supplierreferences[k];
+              if (sr2.supplier === 192 || String(sr2.supplier) === '192') {
+                supplierRef = sr2.ref || sr2.reference || sr2.code || '';
+                break;
+              }
+            }
+          }
+        }
+
         products.push({
           id: d.id || 0,
           name: d.selling_name || '',
@@ -109,6 +126,7 @@ module.exports = async function handler(req, res) {
           dlc_active: !!d.dlc_management_enabled,
           pack: d.pack || 1,
           bio: !!d.bio,
+          supplier_ref: supplierRef,
         });
       }
 
