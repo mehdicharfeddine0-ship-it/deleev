@@ -403,6 +403,11 @@ td{padding:9px 10px;vertical-align:middle;}
       <input class="si" id="siP" placeholder="Rechercher…">
       <span class="rc" id="rcP"></span>
     </div>
+    <div style="display:flex;align-items:center;gap:8px;padding:4px 24px;background:var(--surface);border-bottom:1px solid var(--border)">
+      <button class="cbtn" id="pPrev" onclick="pPage=Math.max(1,pPage-1);renderP()">← Préc.</button>
+      <span style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--text2)" id="pPageInfo">—</span>
+      <button class="cbtn" id="pNext" onclick="pPage++;renderP()">Suiv. →</button>
+    </div>
     <div class="tw"><table>
       <thead><tr>
         <th class="ns">ID</th>
@@ -489,6 +494,7 @@ const PU='https://products.app.deleev.com/products/';
 let DV=null,DP=null,DC=null,DU=null,tab='v';
 let gran='week',per='ALL',sV='ca_desc',qV='',expId=null,rupOnly=false;
 let sP='dvs_asc',qP='',fCats=new Set(),fTypo='',fColis='';
+let pPage=1,pPerPage=50,pExpandedGroup=null;
 let cDay='lundi',cFilter='all';
 let supplierName='',ruptFournisseurIds=new Set(),ruptFournOnly=false;
 
@@ -1306,7 +1312,48 @@ function renderP(){
   document.getElementById('kpCP').textContent=DV&&dates?(totalCAP>0?'-'+fc(totalCAP)+' €':'0 €'):'—';
   document.getElementById('kpTR').textContent=DV&&dates&&trN>0?(Math.round(trSum/trN)+'%'):'—';
 
+  // ── Build grouped list ──
+  // Products with same groupId are grouped; solo products (no groupId) stay individual
+  const grouped=[];
+  const groupMap={};
+  list.forEach(p=>{
+    if(p.groupId){
+      if(!groupMap[p.groupId]){
+        groupMap[p.groupId]={isGroup:true,groupId:p.groupId,members:[],nom:'',totalStock:0};
+        grouped.push(groupMap[p.groupId]);
+      }
+      groupMap[p.groupId].members.push(p);
+      groupMap[p.groupId].totalStock+=(p.stock||0);
+      // Use shortest common name prefix as group name
+      if(!groupMap[p.groupId].nom)groupMap[p.groupId].nom=p.nom;
+    }else{
+      grouped.push(p);
+    }
+  });
+  // Set group name to first member name (they're usually similar)
+  Object.values(groupMap).forEach(g=>{
+    if(g.members.length>1){
+      // Find common prefix
+      const names=g.members.map(m=>m.nom);
+      let prefix=names[0];
+      for(let i=1;i<names.length;i++){
+        while(!names[i].startsWith(prefix)&&prefix.length>10){prefix=prefix.slice(0,-1);}
+      }
+      g.nom=prefix.replace(/[\s,\-(]+$/,'').trim()||names[0];
+    }
+  });
+
+  // ── Pagination ──
+  const totalItems=grouped.length;
+  const totalPages=Math.max(1,Math.ceil(totalItems/pPerPage));
+  if(pPage>totalPages)pPage=totalPages;
+  const startIdx=(pPage-1)*pPerPage;
+  const pageItems=grouped.slice(startIdx,startIdx+pPerPage);
+
   document.getElementById('rcP').textContent=`${list.length} produit${list.length>1?'s':''}`;
+  document.getElementById('pPageInfo').textContent=`Page ${pPage}/${totalPages} (${totalItems} lignes)`;
+  document.getElementById('pPrev').disabled=pPage<=1;
+  document.getElementById('pNext').disabled=pPage>=totalPages;
 
   const catB=(c)=>{
     const cat=getCat(c);
@@ -1314,40 +1361,32 @@ function renderP(){
   };
 
   const tb=document.getElementById('tbP');tb.innerHTML='';
-  if(!list.length){tb.innerHTML='<tr class="empty"><td colspan="11">Aucun résultat</td></tr>';return;}
+  if(!pageItems.length){tb.innerHTML='<tr class="empty"><td colspan="11">Aucun résultat</td></tr>';return;}
 
-  list.forEach(p=>{
+  function renderProdRow(p,isChild){
     const dc=p.dvs!==null?p.dvs:'—';
     const cat=getCat(p.cat);
     const dcc=cat.color;
-
-    // Rupture depuis DV
     let rupHtml='<span style="color:var(--text3);font-size:11px">—</span>';
     if(DV&&dates){
       const gs=pidIdx[String(p.id)]||[];
       if(gs.length){
         const isRF=gs.some(g=>ruptFournisseurIds.has(g.id));
-        if(isRF){
-          rupHtml=`<a class="rf-link" href="${PU}${p.id}?tab=qiqd" target="_blank" onclick="event.stopPropagation()">⚠ Rupt. fourn.</a>`;
-        } else {
-          const aggs=gs.map(g=>agg(g,dates));
-          const avgTR=Math.round(aggs.reduce((s,a)=>s+a.tr,0)/aggs.length);
-          rupHtml=`<span class="badge ${avgTR>0?'b-bad':'b-ok'}">${avgTR}%</span>`;
-        }
+        if(isRF){rupHtml=`<a class="rf-link" href="${PU}${p.id}?tab=qiqd" target="_blank" onclick="event.stopPropagation()">⚠ Rupt. fourn.</a>`;}
+        else{const aggs=gs.map(g=>agg(g,dates));const avgTR=Math.round(aggs.reduce((s,a)=>s+a.tr,0)/aggs.length);rupHtml=`<span class="badge ${avgTR>0?'b-bad':'b-ok'}">${avgTR}%</span>`;}
       }
     }
-
-    const tr=document.createElement('tr');
-    // Courses U link (only for supplier 192 with a supplier ref)
     const isSystemeU=p.supId==='192'||supplierName==='192';
     const cuCode=p.supplierRef||'';
     const cuLink=isSystemeU&&cuCode?`<a class="cu-btn" href="https://www.coursesu.com/p/${cuCode}.html" target="_blank" onclick="event.stopPropagation()">COURSES <span class="cu-u">U</span></a>`:'';
-    // Stock display
     const stockVal=p.stock!==null&&p.stock!==undefined?p.stock:'—';
     const stockColor=p.stock===null||p.stock===undefined?'var(--text3)':p.stock<=0?'var(--rupture)':p.stock<=p.qi?'var(--warn)':'var(--ok)';
+    const indent=isChild?'padding-left:28px':'';
+    const tr=document.createElement('tr');
+    if(isChild)tr.style.background='var(--surface)';
     tr.innerHTML=`
       <td><span style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--text3)">${p.id}</span></td>
-      <td><a class="pl" href="${PU}${p.id}" target="_blank" style="font-weight:500;font-size:12px">${p.nom}</a>${cuLink}</td>
+      <td style="${indent}"><a class="pl" href="${PU}${p.id}" target="_blank" style="font-weight:500;font-size:12px">${p.nom}</a>${cuLink}</td>
       <td><span class="badge ${p.typo==='Frais'?'b-ok':'b-muted'}">${p.typo}</span></td>
       <td><span class="badge ${p.colis==='pack'?'b-blue':'b-muted'}">${p.colis==='pack'?'Colis ×'+p.pack:'Pièce'}</span></td>
       <td class="num" style="color:${stockColor};font-weight:600">${stockVal}</td>
@@ -1357,7 +1396,41 @@ function renderP(){
       <td>${catB(p.cat)}</td>
       <td>${rupHtml}</td>
       <td><span class="badge ${p.da?'b-ok':'b-muted'}">${p.da?'✓ Active':'Non'}</span></td>`;
-    tb.appendChild(tr);
+    return tr;
+  }
+
+  pageItems.forEach(item=>{
+    if(item.isGroup){
+      const g=item;
+      const isExp=pExpandedGroup===g.groupId;
+      const first=g.members[0];
+      const worstCat=g.members.reduce((w,m)=>{const d=m.dvs??999;return d<(w.dvs??999)?m:w;},g.members[0]);
+      const totalStock=g.members.reduce((s,m)=>s+(m.stock||0),0);
+      const anyRup=g.members.some(m=>m.stock!==null&&m.stock<=0);
+      const stockColor=anyRup?'var(--rupture)':totalStock<=0?'var(--rupture)':'var(--ok)';
+      const tr=document.createElement('tr');
+      tr.style.cursor='pointer';
+      if(isExp)tr.classList.add('exp');
+      tr.innerHTML=`
+        <td><span class="chev">${isExp?'▼':'▶'}</span></td>
+        <td><span style="font-weight:600;font-size:12px">${g.nom}</span> <span class="tag">groupe · ${g.members.length} produits</span></td>
+        <td><span class="badge ${first.typo==='Frais'?'b-ok':'b-muted'}">${first.typo}</span></td>
+        <td></td>
+        <td class="num" style="color:${stockColor};font-weight:600">${totalStock}</td>
+        <td class="num">${first.ds!==null?first.ds:'—'}</td>
+        <td class="num">${first.dv!==null?first.dv:'—'}</td>
+        <td class="num" style="color:${getCat(worstCat.cat).color};font-weight:500">${worstCat.dvs!==null?worstCat.dvs:'—'}</td>
+        <td>${catB(worstCat.cat)}</td>
+        <td>${anyRup?'<span class="badge b-bad">Rupt.</span>':'<span style="color:var(--text3)">—</span>'}</td>
+        <td></td>`;
+      tr.addEventListener('click',()=>{pExpandedGroup=isExp?null:g.groupId;renderP();});
+      tb.appendChild(tr);
+      if(isExp){
+        g.members.forEach(m=>{tb.appendChild(renderProdRow(m,true));});
+      }
+    }else{
+      tb.appendChild(renderProdRow(item,false));
+    }
   });
 
   // Refresh cat panel stats (car la période peut avoir changé)
@@ -1441,10 +1514,10 @@ document.querySelectorAll('.sb').forEach(btn=>{
 document.getElementById('pSel').addEventListener('change',e=>{per=e.target.value;renderV();});
 document.getElementById('sV').addEventListener('change',e=>{sV=e.target.value;renderV();});
 document.getElementById('siV').addEventListener('input',e=>{qV=e.target.value.trim();renderV();});
-document.getElementById('sP').addEventListener('change',e=>{sP=e.target.value;renderP();});
-document.getElementById('fTypo').addEventListener('change',e=>{fTypo=e.target.value;renderP();});
-document.getElementById('fColis').addEventListener('change',e=>{fColis=e.target.value;renderP();});
-document.getElementById('siP').addEventListener('input',e=>{qP=e.target.value.trim();renderP();});
+document.getElementById('sP').addEventListener('change',e=>{sP=e.target.value;pPage=1;renderP();});
+document.getElementById('fTypo').addEventListener('change',e=>{fTypo=e.target.value;pPage=1;renderP();});
+document.getElementById('fColis').addEventListener('change',e=>{fColis=e.target.value;pPage=1;renderP();});
+document.getElementById('siP').addEventListener('input',e=>{qP=e.target.value.trim();pPage=1;renderP();});
 
 function resetAll(){
   DV=null;DP=null;DC=null;DU=null;supplierName='';
@@ -1832,6 +1905,7 @@ async function uFetchProducts(){
         qd:p.qd,
         lifetimeDays:p.lifetime_days,
         supplierRef:p.supplier_ref||'',
+        groupId:p.group_id||null,
       };
     });
 
