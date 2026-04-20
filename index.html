@@ -394,6 +394,7 @@ td{padding:9px 10px;vertical-align:middle;}
         <option value="pack">Par colis</option>
         <option value="free">À la pièce</option>
       </select>
+      <button class="fbtn" id="fQiBtn" onclick="fQiOnly=!fQiOnly;document.getElementById('fQiBtn').classList.toggle('on',fQiOnly);pPage=1;renderP()">QI active</button>
       <select id="sP">
         <option value="dvs_asc">Durée vie ↑</option>
         <option value="dvs_desc">Durée vie ↓</option>
@@ -494,7 +495,7 @@ const PU='https://products.app.deleev.com/products/';
 let DV=null,DP=null,DC=null,DU=null,tab='v';
 let gran='week',per='ALL',sV='ca_desc',qV='',expId=null,rupOnly=false;
 let sP='dvs_asc',qP='',fCats=new Set(),fTypo='',fColis='';
-let pPage=1,pPerPage=50,pExpandedGroup=null;
+let pPage=1,pPerPage=50,pExpandedGroup=null,fQiOnly=false;
 let cDay='lundi',cFilter='all';
 let supplierName='',ruptFournisseurIds=new Set(),ruptFournOnly=false;
 
@@ -1260,6 +1261,17 @@ function getFilteredProds(){
   if(fCats.size>0)list=list.filter(p=>fCats.has(p.cat));
   if(fTypo)list=list.filter(p=>p.typo===fTypo);
   if(fColis)list=list.filter(p=>p.colis===fColis);
+  if(fQiOnly){
+    // For grouped products: keep entire group if any member has QI > 0
+    const groupsWithQI=new Set();
+    list.forEach(p=>{
+      if(p.groupId&&p.qi!==null&&p.qi!==undefined&&p.qi>0)groupsWithQI.add(p.groupId);
+    });
+    list=list.filter(p=>{
+      if(p.groupId)return groupsWithQI.has(p.groupId);
+      return p.qi!==null&&p.qi!==undefined&&p.qi>0;
+    });
+  }
   if(qP){const q=qP.toLowerCase();list=list.filter(p=>p.nom.toLowerCase().includes(q)||String(p.id).includes(q));}
   list.sort((a,b)=>{
     if(sP==='dvs_asc')return(a.dvs??999)-(b.dvs??999);
