@@ -261,7 +261,10 @@ td{padding:9px 10px;vertical-align:middle;}
       <input type="file" id="fP" accept=".csv">
       <div class="file-ok" id="fPname" style="display:none"></div>
       <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px" onclick="event.stopPropagation()">
-        <button class="ebtn" onclick="uFetchProducts()" style="font-size:10px;padding:5px 12px">📦 Charger produits Système U frais</button>
+        <div style="display:flex;gap:4px;align-items:center;justify-content:center;flex-wrap:wrap">
+          <select id="uProdSupplier" style="font-family:'Geist Mono',monospace;font-size:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 6px;border-radius:6px;outline:none;max-width:180px"></select>
+          <button class="ebtn" onclick="uFetchProducts()" style="font-size:10px;padding:5px 10px">📦 Charger</button>
+        </div>
         <div id="uProdStatus" style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--text3);margin-top:4px;display:none"></div>
       </div>
     </div>
@@ -1770,11 +1773,14 @@ async function uFetchCommandes(){
   }
 }
 
-// Fetch all Système U frais products via proxy
+// Fetch products for selected supplier via proxy
 async function uFetchProducts(){
+  const sel=document.getElementById('uProdSupplier');
+  const supId=sel?sel.value:'192';
+  const supName=sel?sel.options[sel.selectedIndex]?.text:'Système U frais';
   const status=document.getElementById('uProdStatus');
   status.style.display='block';
-  status.textContent='Chargement des produits Système U frais…';
+  status.textContent='Chargement des produits '+supName+'…';
   status.style.color='var(--units)';
 
   try{
@@ -1784,7 +1790,7 @@ async function uFetchProducts(){
 
     while(page<=40){
       status.textContent='Chargement page '+page+'… ('+allProducts.length+' produits)';
-      const resp=await fetch(U_PROXY+'?action=products&page='+page);
+      const resp=await fetch(U_PROXY+'?action=products&page='+page+'&supplier='+supId);
       const data=await resp.json();
       if(data.error){
         if(allProducts.length>0)break;
@@ -1818,7 +1824,7 @@ async function uFetchProducts(){
         da,ds,dv,dvs,cat,
         colis:'free',
         pack:p.pack||1,
-        supId:'192',
+        supId:supId,
         barcode:p.barcode||'',
         stock:p.stock,
         realStock:p.realStock,
@@ -1830,9 +1836,10 @@ async function uFetchProducts(){
     });
 
     _lastProdFromAPI=allProducts;
+    supplierName=supId;
     if(DU&&uParsed)uMatchWithAPIProducts(allProducts);
 
-    const msg=allProducts.length+'/'+totalFound+' produits ('+page+' pages)';
+    const msg=allProducts.length+'/'+totalFound+' produits '+supName+' ('+page+' pages)';
     document.getElementById('fPname').textContent='✓ '+msg;
     document.getElementById('fPname').style.display='block';
     document.getElementById('dzP').style.borderColor='var(--ok)';
@@ -2265,6 +2272,27 @@ let _lastProdCSV=null;
     setTimeout(()=>{if(DU&&uParsed)uMatchWithProducts(text);},0);
     return result;
   };
+})();
+
+// Populate supplier dropdown with fresh suppliers sorted by name
+(function(){
+  const sel=document.getElementById('uProdSupplier');
+  if(!sel)return;
+  const freshList=[];
+  FRESH_IDS.forEach(id=>{
+    const name=SUPPLIERS[id]||('#'+id);
+    freshList.push({id,name});
+  });
+  freshList.sort((a,b)=>a.name.localeCompare(b.name,'fr',{sensitivity:'base'}));
+  // Put Système U frais first
+  const suIdx=freshList.findIndex(f=>f.id==='192');
+  if(suIdx>0){const su=freshList.splice(suIdx,1)[0];freshList.unshift(su);}
+  freshList.forEach(f=>{
+    const opt=document.createElement('option');
+    opt.value=f.id;
+    opt.textContent=f.name;
+    sel.appendChild(opt);
+  });
 })();
 </script>
 </body>
