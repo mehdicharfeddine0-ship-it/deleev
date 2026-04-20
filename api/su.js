@@ -37,11 +37,24 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ rows: rows });
 
     } else if (action === 'bl' && pk) {
-      var resp2 = await fetch(BASE + '/systemeu/raw_u20/' + pk + '/', { headers });
-      if (!resp2.ok) return res.status(200).json({ error: 'HTTP ' + resp2.status });
+      // Step 1: fetch the delivery_note detail page to find the real raw_u20 ID
+      var detailResp = await fetch(BASE + '/systemeu/delivery_note/' + pk + '/', { headers, redirect: 'follow' });
+      if (!detailResp.ok) return res.status(200).json({ error: 'delivery_note HTTP ' + detailResp.status });
+      var detailHtml = await detailResp.text();
+
+      // Find the raw_u20 link in the page
+      var rawMatch = detailHtml.match(/raw_u20\/(\d+)/);
+      if (!rawMatch) {
+        return res.status(200).json({ error: 'Lien raw_u20 non trouvé dans la page delivery_note/' + pk });
+      }
+      var rawPk = rawMatch[1];
+
+      // Step 2: fetch the actual JSON from raw_u20
+      var resp2 = await fetch(BASE + '/systemeu/raw_u20/' + rawPk + '/', { headers });
+      if (!resp2.ok) return res.status(200).json({ error: 'raw_u20 HTTP ' + resp2.status });
       var text = await resp2.text();
       try { return res.status(200).json(JSON.parse(text)); }
-      catch (e) { return res.status(200).json({ error: 'Réponse non-JSON' }); }
+      catch (e) { return res.status(200).json({ error: 'Réponse non-JSON de raw_u20/' + rawPk }); }
 
     } else if (action === 'products') {
       var resp3 = await fetch('https://search.deleev.com/staff/', {
@@ -77,10 +90,6 @@ module.exports = async function handler(req, res) {
         var d = hits[i].document || hits[i];
         var c9 = (d.by_centers && d.by_centers['9']) ? d.by_centers['9'] : null;
 
-        // days_before_expiry = DLC stock (nb jours)
-        // retention_periods = DLC vente (nb jours)
-        // lifetime_days = durée de vie en stock (paramètre actuel)
-        // durée vie stock calculée = DLC stock - DLC vente
         var dlcStock = typeof d.days_before_expiry === 'number' ? d.days_before_expiry : null;
         var dlcSale = typeof d.retention_periods === 'number' ? d.retention_periods : null;
         var lifetimeDays = typeof d.lifetime_days === 'number' ? d.lifetime_days : null;
