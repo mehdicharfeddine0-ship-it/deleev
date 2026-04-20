@@ -165,8 +165,18 @@ module.exports = async function handler(req, res) {
         products: products
       });
 
+    } else if (action === 'commandes') {
+      // Fetch the commandes CSV export from admin
+      var respC = await fetch(BASE + '/suppliers/auto?logistics_center_id=9&franco_is_meet=-1&order_auto_enabled=-1&last_order_from=&last_order_to=&submit=export', { headers, redirect: 'follow' });
+      if (!respC.ok) return res.status(200).json({ error: 'HTTP ' + respC.status });
+      var csvText = await respC.text();
+      if (csvText.includes('FormSignin') || csvText.includes('action="/account/login"')) {
+        return res.status(200).json({ error: 'Session expirée.' });
+      }
+      return res.status(200).json({ csv: csvText });
+
     } else {
-      return res.status(200).json({ error: 'action=list, bl, products, ou debug' });
+      return res.status(200).json({ error: 'action=list, bl, products, commandes, ou debug' });
     }
   } catch (globalErr) {
     return res.status(200).json({ error: 'Crash: ' + globalErr.message });
