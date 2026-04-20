@@ -79,6 +79,7 @@ module.exports = async function handler(req, res) {
       });
 
     } else if (action === 'products') {
+      var supplierId = req.query.supplier || '192';
       var resp4 = await fetch('https://search.deleev.com/staff/', {
         method: 'POST',
         headers: {
@@ -92,7 +93,7 @@ module.exports = async function handler(req, res) {
           perPage: 250,
           page: page,
           queryBy: 'selling_name,primeur_origin',
-          filterBy: 'supplierreferences.supplier:=192',
+          filterBy: 'supplierreferences.supplier:=' + supplierId,
           sortBy: 'updated_at_timestamp:desc'
         })
       });
@@ -116,12 +117,13 @@ module.exports = async function handler(req, res) {
         var dlcSale = typeof d.retention_periods === 'number' ? d.retention_periods : null;
         var lifetimeDays = typeof d.lifetime_days === 'number' ? d.lifetime_days : null;
 
-        // Extract supplier ref for supplier 192
+        // Extract supplier ref for selected supplier
         var supplierRef = '';
+        var supIdNum = parseInt(supplierId);
         if (d.supplierreference_set && Array.isArray(d.supplierreference_set)) {
           for (var j = 0; j < d.supplierreference_set.length; j++) {
             var sr = d.supplierreference_set[j];
-            if (sr.supplier === 192 || sr.supplier_id === 192 || String(sr.supplier) === '192') {
+            if (sr.supplier === supIdNum || sr.supplier_id === supIdNum || String(sr.supplier) === supplierId) {
               supplierRef = sr.supplier_reference || sr.ref || sr.reference || '';
               break;
             }
@@ -131,7 +133,7 @@ module.exports = async function handler(req, res) {
           if (Array.isArray(d.supplierreferences)) {
             for (var k = 0; k < d.supplierreferences.length; k++) {
               var sr2 = d.supplierreferences[k];
-              if (sr2.supplier === 192 || String(sr2.supplier) === '192') {
+              if (sr2.supplier === supIdNum || String(sr2.supplier) === supplierId) {
                 supplierRef = sr2.supplier_reference || sr2.ref || sr2.reference || '';
                 break;
               }
