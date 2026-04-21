@@ -501,7 +501,7 @@ td{padding:9px 10px;vertical-align:middle;}
 
   <div id="vK">
     <!-- ONGLET KPI FRAIS -->
-    <div id="kNoData" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:80px 40px;min-height:60vh">
+    <div id="kNoData" style="display:none;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:80px 40px;min-height:60vh">
       <div style="font-size:48px;opacity:.3">📈</div>
       <div style="font-size:16px;font-weight:500;color:var(--text2)">Aucune donnée KPI</div>
       <div style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--text3);text-align:center;max-width:400px">
@@ -509,7 +509,7 @@ td{padding:9px 10px;vertical-align:middle;}
       </div>
       <div style="display:flex;gap:10px;margin-top:16px">
         <button class="ebtn" onclick="loadKpiJMinus1()">📥 Charger J-1</button>
-        <button class="rbtn" onclick="loadKpiBulk()" id="btnBulk">📅 Init 2 mois</button>
+        <button class="rbtn" onclick="confirmBulkLoad()" id="btnBulk">📅 Init 2 mois</button>
       </div>
       <div id="kpiInitMsg" style="display:none;font-family:'Geist Mono',monospace;font-size:11px;color:var(--text3);margin-top:8px"></div>
     </div>
@@ -518,6 +518,7 @@ td{padding:9px 10px;vertical-align:middle;}
       <div class="controls">
         <span class="cl">Actions</span>
         <button class="ebtn" onclick="loadKpiJMinus1()">📥 J-1</button>
+        <button class="rbtn" onclick="confirmBulkLoad()">📅 Init 2 mois</button>
         <button class="rbtn" onclick="refreshKpiTable()">🔄</button>
         <div class="vsep"></div>
         <span class="cl">Vue</span>
@@ -527,10 +528,17 @@ td{padding:9px 10px;vertical-align:middle;}
           <button class="sb" id="kfMonth" onclick="setKpiFilter('month')">Mois</button>
         </div>
         <div class="vsep"></div>
+        <span class="cl">Fournisseur</span>
+        <select id="kSupSelect" onchange="renderKpiView()" style="max-width:220px">
+          <option value="">— Tous (résumé) —</option>
+        </select>
+        <div class="vsep"></div>
         <span class="rc" id="kpiPeriod">—</span>
       </div>
 
       <div id="kpiCards" class="u-kpis" style="padding:12px 24px"></div>
+
+      <div id="kpiChart" style="padding:0 24px;margin-bottom:16px"></div>
 
       <div style="padding:0 24px">
         <div id="kpiMessage" style="display:none;margin-top:8px;margin-bottom:8px;font-family:'Geist Mono',monospace;font-size:12px;padding:12px 16px;border-radius:8px"></div>
@@ -538,16 +546,16 @@ td{padding:9px 10px;vertical-align:middle;}
 
       <div class="tw">
         <table>
-          <thead>
+          <thead id="kpiTableHead">
             <tr>
               <th class="ns">Date</th>
               <th>CA TTC</th>
               <th>DLC Sorti</th>
-              <th>Coûts Zone Frais</th>
+              <th>Coûts Zone</th>
               <th>CA HT Frais</th>
-              <th>% CA Frais</th>
-              <th>Items Frais</th>
-              <th>Tps Picking</th>
+              <th>% CA</th>
+              <th>Items</th>
+              <th>Picking</th>
               <th>Manquants</th>
             </tr>
           </thead>
@@ -2509,364 +2517,268 @@ let _lastProdCSV=null;
 
 const KPI_CONFIG={googleSheetsUrl:'https://script.google.com/macros/s/AKfycbzWrYdVI5cuyP5iLOMBTmx6d_XPKaGR0h9_8nJUnVl8yBjQ0mYAXO7FZ2hEcBR7sUGu/exec',proxyUrl:'https://project-rps1u.vercel.app/api/su.js',freshSupplierIds:new Set(['174','257','306','621','1754','94','232','325','566','1719','102','415','108','43','2285','147','2319','305','1777','2231','261','195','329','80','1757','1778','297','581','525','270','168','34','141','151','2234','1854','123','133','107','2317','1666','196','105','97','341','364','363','172','12','266','1756','224','377','167','204','201','10','153','471','192','199','1718','451','413','269','1746','1755','339','144','1695']),supplierNames:{"10":"CNER","12":"Desailly","34":"Frais devant - Maxime Geraud","43":"Anthès découpe","80":"Mammafiore PRECO fromage lundi > lundi s1","94":"Norocean","97":"Sturia - Sturgeon","102":"St Jean","105":"Panache des Landes","107":"Beillevaire crèmerie A pour C","108":"Kalios","123":"Pâte feuilletée françois","133":"Anthes everyday","141":"Maison conquet","144":"Ferme Montchervet","147":"Mammafiore EVERYDAY/SEC","151":"Briau produits","153":"Beillevaire fromage découpe A pour C","167":"Hardouin TRAITEUR","168":"Sedisal (Itsaluz)","172":"Vitafrais","174":"Jay & Joy (Les Nouveaux Affineurs)","192":"Système U frais","195":"Yarden","196":"Desailly précommande","199":"Boucherie BE A pour B","201":"Beillevaire traiteur","204":"Maison Conquet précommande","224":"HOANAM","232":"Bellota-Bellota (Byzance)","257":"Biodis Frais","261":"Comptoir du Caviar","266":"ET ALORS (Les Niçois & JAJAJA)","269":"Happyvore","270":"Guyader","297":"Galliance","305":"Padouen","306":"La Grande Epicerie - frais","325":"La Grande Epicerie - Labo","329":"Kook's (K factory)","339":"Marie Severac","341":"Evootrade (Gourmet)","363":"Heura","364":"Mavrommatis","377":"Shaki shaki","413":"Hardouin","415":"Alterfood","451":"Fous de l'Ile","471":"Charal","525":"Planted","566":"PREVOGEL","581":"Novandie","621":"Sill","1666":"Montalet","1695":"Ronsard cacher (S2M VOLAILLES)","1718":"Nemrod","1719":"Tempé","1746":"AMALAB - PINSA DI MARCO","1754":"Beillevaire FRICHTI","1755":"Pastavino FRICHTI","1756":"Cochonaille d'Olivier FRICHTI","1757":"Golfera","1777":"Pastavino Prep Food","1778":"Pastavino Pasta","1854":"Maison Beya","2231":"Vivant","2234":"La Brasserie Parallèle","2285":"ET ALORS (Les Niçois & JAJAJA) FRAIS","2317":"Les délices du chef","2319":"ATELIER Sö"}};
 
-let kpiRawRows = [];
-let kpiFilter = 'day';
+let kpiRawRows=[], kpiFilter='day', kpiLoaded=false;
 
-// ── Parsing helpers ──
+// ── Parsing ──
+function parseKpiValue(td){const m=td.match(/<strong>([^<]+)<\/strong>/);const v=m?m[1].trim():td.replace(/<[^>]+>/g,'').trim();if(!v||v==='0')return 0;if(v.includes('€'))return parseFloat(v.replace(/[€\s\u00a0]/g,'').replace(',','.'))||0;if(v.includes('%'))return parseFloat(v.replace('%','').replace(',','.'))||0;if(v.includes('m')&&v.includes('s')){const mm=v.match(/(\d+)m/),ss=v.match(/(\d+)s/);return(mm?parseInt(mm[1])*60:0)+(ss?parseInt(ss[1]):0);}if(/^\d+s$/.test(v))return parseInt(v);return parseFloat(v.replace(/[\s\u00a0]/g,'').replace(',','.'))||0;}
+function extractByLabel(html,label){const e=label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');const r=new RegExp('<tr[^>]*>[\\s\\S]*?<strong>'+e+'</strong>[\\s\\S]*?<td[^>]*class="[^"]*table-info[^"]*"[^>]*>([\\s\\S]*?)</td>','i');const m=html.match(r);return m?parseKpiValue(m[1]):0;}
+function extractById(html,id){const r=new RegExp('<tr[^>]*id="'+id+'"[^>]*>[\\s\\S]*?<td[^>]*class="[^"]*table-info[^"]*"[^>]*>([\\s\\S]*?)</td>','i');const m=html.match(r);return m?parseKpiValue(m[1]):0;}
+function parseDashboardPage(h){return h?{ca_ttc:extractById(h,'ca_ttc')}:{};}
+function parseStockStat(h){return h?{montant_dlc:extractByLabel(h,'Montant Sorti DLC')}:{};}
+function parsePackingStat(h){return h?{couts_zone_frais:extractByLabel(h,'Coûts Zone Frais')}:{};}
+function parseWarehouseZone(h){return h?{ca_ht_frais:extractByLabel(h,'CA HT Frais'),pct_ca_ht_frais:extractByLabel(h,'% CA HT Frais'),item_prep_frais:extractByLabel(h,'Item Prép. Frais'),tps_picking_moyen_frais:extractByLabel(h,'Tps picking moyen Frais'),vrai_manquants_frais:extractByLabel(h,'Vrai Manquants Frais')}:{};}
+function parseSupplier(h){if(!h)return{};const s={};KPI_CONFIG.freshSupplierIds.forEach(id=>{const n=KPI_CONFIG.supplierNames[id];if(!n)return;s['sup_'+id]={name:n,ca_ht:extractByLabel(h,'CA HT '+n),marge:extractByLabel(h,'Taux de marge '+n)};});return s;}
 
-function parseKpiValue(tdContent) {
-  // Extract value from <strong>VALUE</strong> or plain text
-  const match = tdContent.match(/<strong>([^<]+)<\/strong>/);
-  const val = match ? match[1].trim() : tdContent.replace(/<[^>]+>/g, '').trim();
-  if (!val || val === '0') return 0;
-  if (val.includes('€')) return parseFloat(val.replace(/[€\s\u00a0]/g, '').replace(',', '.')) || 0;
-  if (val.includes('%')) return parseFloat(val.replace('%', '').replace(',', '.')) || 0;
-  if (val.includes('m') && val.includes('s')) {
-    const m = val.match(/(\d+)m/), s = val.match(/(\d+)s/);
-    return (m ? parseInt(m[1]) * 60 : 0) + (s ? parseInt(s[1]) : 0);
-  }
-  if (/^\d+s$/.test(val)) return parseInt(val);
-  return parseFloat(val.replace(/[\s\u00a0]/g, '').replace(',', '.')) || 0;
+// ── Fetch / Save / Load ──
+async function fetchKpiForDate(ds){const u=KPI_CONFIG.proxyUrl+'?action=fetch_kpis&date_min='+ds+'&date_max='+ds+'&agregation=day';const r=await fetch(u);if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();if(d.error)throw new Error(d.error);return{date:ds,...parseDashboardPage(d.data.dashboard?.html||''),...parseStockStat(d.data.stockstat?.html||''),...parsePackingStat(d.data.packingstat?.html||''),...parseWarehouseZone(d.data.warehousezone?.html||''),suppliers:parseSupplier(d.data.supplier?.html||'')};}
+
+async function saveKpisToGoogleSheets(date,kpis){
+  const p={date:date,ca_ttc:kpis.ca_ttc||0,montant_dlc:kpis.montant_dlc||0,couts_zone_frais:kpis.couts_zone_frais||0,ca_ht_frais:kpis.ca_ht_frais||0,pct_ca_ht_frais:kpis.pct_ca_ht_frais||0,item_prep_frais:kpis.item_prep_frais||0,tps_picking_moyen_frais:kpis.tps_picking_moyen_frais||0,vrai_manquants_frais:kpis.vrai_manquants_frais||0};
+  if(kpis.suppliers){const sd={};Object.keys(kpis.suppliers).forEach(k=>{const s=kpis.suppliers[k];sd[k+'_ca']=s.ca_ht||0;sd[k+'_marge']=s.marge||0;});p.suppliers=sd;}
+  const r=await fetch(KPI_CONFIG.proxyUrl+'?action=save_kpis',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});
+  if(!r.ok)throw new Error('HTTP '+r.status);return await r.json();
 }
 
-function extractByLabel(html, label) {
-  // Pattern: <strong>LABEL</strong> ... </td> ... <td class="xxx table-info">...<strong>VALUE</strong>...</td>
-  // The label and value are in the SAME <tr>
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp('<tr[^>]*>[\\s\\S]*?<strong>' + escaped + '</strong>[\\s\\S]*?<td[^>]*class="[^"]*table-info[^"]*"[^>]*>([\\s\\S]*?)</td>', 'i');
-  const match = html.match(regex);
-  if (!match) return 0;
-  return parseKpiValue(match[1]);
+async function loadKpisFromGoogleSheets(){
+  const r=await fetch(KPI_CONFIG.proxyUrl+'?action=load_kpis');if(!r.ok)throw new Error('HTTP '+r.status);
+  const res=await r.json();if(res.error)throw new Error(res.error);
+  return(res.rows||[]).map(r=>{if(typeof r.ca_ttc==='string')r.ca_ttc=parseFloat(r.ca_ttc.replace(/[^\d.,-]/g,'').replace(',','.'))||0;return r;});
 }
 
-function extractById(html, id) {
-  // Pattern: <tr ... id="ID"> ... <td class="ID table-info">...<strong>VALUE</strong>...</td>
-  const regex = new RegExp('<tr[^>]*id="' + id + '"[^>]*>[\\s\\S]*?<td[^>]*class="[^"]*table-info[^"]*"[^>]*>([\\s\\S]*?)</td>', 'i');
-  const match = html.match(regex);
-  if (!match) return 0;
-  return parseKpiValue(match[1]);
-}
-
-// ── Parsers per section ──
-
-function parseDashboardPage(html) {
-  if (!html) return {};
-  return { ca_ttc: extractById(html, 'ca_ttc') };
-}
-
-function parseStockStat(html) {
-  if (!html) return {};
-  return { montant_dlc: extractByLabel(html, 'Montant Sorti DLC') };
-}
-
-function parsePackingStat(html) {
-  if (!html) return {};
-  return { couts_zone_frais: extractByLabel(html, 'Coûts Zone Frais') };
-}
-
-function parseWarehouseZone(html) {
-  if (!html) return {};
-  return {
-    ca_ht_frais: extractByLabel(html, 'CA HT Frais'),
-    pct_ca_ht_frais: extractByLabel(html, '% CA HT Frais'),
-    item_prep_frais: extractByLabel(html, 'Item Prép. Frais'),
-    tps_picking_moyen_frais: extractByLabel(html, 'Tps picking moyen Frais'),
-    vrai_manquants_frais: extractByLabel(html, 'Vrai Manquants Frais')
-  };
-}
-
-function parseSupplier(html) {
-  if (!html) return {};
-  const suppliers = {};
-  KPI_CONFIG.freshSupplierIds.forEach(supplierId => {
-    const name = KPI_CONFIG.supplierNames[supplierId];
-    if (!name) return;
-    const key = 'sup_' + supplierId;
-    suppliers[key] = {
-      name: name,
-      ca_ht: extractByLabel(html, 'CA HT ' + name),
-      marge: extractByLabel(html, 'Taux de marge ' + name)
-    };
-  });
-  return suppliers;
-}
-
-// ── Fetch, save, load ──
-
-async function fetchKpiForDate(dateStr) {
-  const url = KPI_CONFIG.proxyUrl + '?action=fetch_kpis&date_min=' + dateStr + '&date_max=' + dateStr + '&agregation=day';
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error('HTTP ' + resp.status);
-  const raw = await resp.json();
-  if (raw.error) throw new Error(raw.error);
-
-  const kpis = {
-    date: dateStr,
-    ...parseDashboardPage(raw.data.dashboard?.html || ''),
-    ...parseStockStat(raw.data.stockstat?.html || ''),
-    ...parsePackingStat(raw.data.packingstat?.html || ''),
-    ...parseWarehouseZone(raw.data.warehousezone?.html || ''),
-    suppliers: parseSupplier(raw.data.supplier?.html || '')
-  };
-  return kpis;
-}
-
-async function saveKpisToGoogleSheets(date, kpis) {
-  // Build flat payload: base KPIs + supplier data
-  const payload = {
-    date: date,
-    ca_ttc: kpis.ca_ttc || 0,
-    montant_dlc: kpis.montant_dlc || 0,
-    couts_zone_frais: kpis.couts_zone_frais || 0,
-    ca_ht_frais: kpis.ca_ht_frais || 0,
-    pct_ca_ht_frais: kpis.pct_ca_ht_frais || 0,
-    item_prep_frais: kpis.item_prep_frais || 0,
-    tps_picking_moyen_frais: kpis.tps_picking_moyen_frais || 0,
-    vrai_manquants_frais: kpis.vrai_manquants_frais || 0
-  };
-  // Add supplier data
-  if (kpis.suppliers) {
-    const supData = {};
-    Object.keys(kpis.suppliers).forEach(key => {
-      const s = kpis.suppliers[key];
-      supData[key + '_ca'] = s.ca_ht || 0;
-      supData[key + '_marge'] = s.marge || 0;
-    });
-    payload.suppliers = supData;
-  }
-  const resp = await fetch(KPI_CONFIG.proxyUrl + '?action=save_kpis', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  if (!resp.ok) throw new Error('HTTP ' + resp.status);
-  return await resp.json();
-}
-
-async function loadKpisFromGoogleSheets() {
-  const resp = await fetch(KPI_CONFIG.proxyUrl + '?action=load_kpis');
-  if (!resp.ok) throw new Error('HTTP ' + resp.status);
-  const result = await resp.json();
-  if (result.error) throw new Error(result.error);
-  // Ensure ca_ttc is a number, not a date string
-  const rows = (result.rows || []).map(r => {
-    if (typeof r.ca_ttc === 'string') r.ca_ttc = parseFloat(r.ca_ttc.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
-    return r;
-  });
-  return rows;
-}
-
-// ── Load actions ──
-
-async function loadKpiJMinus1() {
-  showKpiMessage('info', '⏳ Chargement des KPIs J-1...');
-  try {
-    const d = new Date(); d.setDate(d.getDate() - 1);
-    const dateStr = d.toISOString().split('T')[0];
-    const kpis = await fetchKpiForDate(dateStr);
-    await saveKpisToGoogleSheets(dateStr, kpis);
-    // Trim to 60 days
-    try { await fetch(KPI_CONFIG.proxyUrl + '?action=trim_kpis&keep=60'); } catch(e) {}
+// ── Actions ──
+async function loadKpiJMinus1(){
+  showKpiMessage('info','⏳ Chargement des KPIs J-1...');
+  try{
+    const d=new Date();d.setDate(d.getDate()-1);const ds=d.toISOString().split('T')[0];
+    // Check if already loaded
+    if(kpiRawRows.some(r=>r.date===ds)){showKpiMessage('info','✅ J-1 ('+ds+') déjà chargé !');setTimeout(()=>showKpiMessage('success','✅ '+ds+' déjà présent'),100);return;}
+    const kpis=await fetchKpiForDate(ds);
+    await saveKpisToGoogleSheets(ds,kpis);
+    try{await fetch(KPI_CONFIG.proxyUrl+'?action=trim_kpis&keep=60');}catch(e){}
     await refreshKpiTable();
-    showKpiMessage('success', '✅ KPIs du ' + dateStr + ' chargés !');
-  } catch (err) {
-    showKpiMessage('error', '❌ ' + err.message);
-  }
+    showKpiMessage('success','✅ KPIs du '+ds+' chargés !');
+  }catch(err){showKpiMessage('error','❌ '+err.message);}
 }
 
-async function loadKpiBulk() {
-  const msgEl = document.getElementById('kpiInitMsg');
-  if (msgEl) { msgEl.style.display = 'block'; msgEl.textContent = '⏳ Initialisation...'; }
-  showKpiMessage('info', '⏳ Chargement des 2 derniers mois...');
-  try {
-    const now = new Date();
-    let loaded = 0, errors = 0;
-    for (let i = 60; i >= 1; i--) {
-      const d = new Date(now); d.setDate(d.getDate() - i);
-      const ds = d.toISOString().split('T')[0];
-      try {
-        const kpis = await fetchKpiForDate(ds);
-        await saveKpisToGoogleSheets(ds, kpis);
-        loaded++;
-      } catch (e) { errors++; }
-      if (msgEl) msgEl.textContent = '⏳ ' + loaded + '/60 jours chargés...';
-      showKpiMessage('info', '⏳ ' + loaded + '/60 jours chargés (' + errors + ' erreurs)');
+function confirmBulkLoad(){
+  if(kpiRawRows.length>0){
+    if(!confirm('⚠️ Vous avez déjà '+kpiRawRows.length+' jours de données.\n\nCette action va re-fetcher les 60 derniers jours depuis le site et écraser les données existantes dans Google Sheets.\n\nContinuer ?'))return;
+  }
+  loadKpiBulk();
+}
+
+async function loadKpiBulk(){
+  const msg=document.getElementById('kpiInitMsg');
+  if(msg){msg.style.display='block';msg.textContent='⏳ Initialisation...';}
+  showKpiMessage('info','⏳ Chargement des 2 derniers mois...');
+  try{
+    let ok=0,err=0;
+    for(let i=60;i>=1;i--){
+      const d=new Date();d.setDate(d.getDate()-i);const ds=d.toISOString().split('T')[0];
+      try{const k=await fetchKpiForDate(ds);await saveKpisToGoogleSheets(ds,k);ok++;}catch(e){err++;}
+      const t='⏳ '+ok+'/60 jours ('+err+' erreurs)';
+      if(msg)msg.textContent=t;showKpiMessage('info',t);
     }
-    await refreshKpiTable();
-    showKpiMessage('success', '✅ ' + loaded + ' jours chargés !');
-    if (msgEl) msgEl.textContent = '✅ Terminé !';
-  } catch (err) {
-    showKpiMessage('error', '❌ ' + err.message);
-    if (msgEl) msgEl.textContent = '❌ ' + err.message;
-  }
+    try{await fetch(KPI_CONFIG.proxyUrl+'?action=trim_kpis&keep=60');}catch(e){}
+    await refreshKpiTable();showKpiMessage('success','✅ '+ok+' jours chargés !');
+    if(msg)msg.textContent='✅ Terminé !';
+  }catch(e){showKpiMessage('error','❌ '+e.message);if(msg)msg.textContent='❌ '+e.message;}
 }
 
-async function refreshKpiTable() {
-  try {
-    const rows = await loadKpisFromGoogleSheets();
-    kpiRawRows = rows;
-    DK = rows.length > 0;
-    document.getElementById('kNoData').style.display = DK ? 'none' : 'flex';
-    document.getElementById('kDash').style.display = DK ? 'block' : 'none';
-    if (DK) renderKpiView();
-    const msgEl = document.getElementById('kpiMessage');
-    if (msgEl && msgEl.style.color !== 'var(--rupture)') msgEl.style.display = 'none';
-  } catch (err) {
-    showKpiMessage('error', '❌ ' + err.message);
-  }
+async function refreshKpiTable(){
+  try{
+    const rows=await loadKpisFromGoogleSheets();
+    kpiRawRows=rows;DK=rows.length>0;kpiLoaded=true;
+    document.getElementById('kNoData').style.display=DK?'none':'flex';
+    document.getElementById('kDash').style.display=DK?'block':'none';
+    if(DK){populateSupplierSelect();renderKpiView();}
+    const m=document.getElementById('kpiMessage');if(m&&m.style.color!=='var(--rupture)')m.style.display='none';
+  }catch(e){showKpiMessage('error','❌ '+e.message);}
 }
 
-// ── Filter & Aggregate ──
-
-function setKpiFilter(f) {
-  kpiFilter = f;
-  document.getElementById('kfDay').classList.toggle('active', f === 'day');
-  document.getElementById('kfWeek').classList.toggle('active', f === 'week');
-  document.getElementById('kfMonth').classList.toggle('active', f === 'month');
-  renderKpiView();
-}
-
-function aggregateKpiRows(rows, filter) {
-  if (filter === 'day') return rows;
-  const groups = {};
-  rows.forEach(row => {
-    const d = new Date(row.date);
-    let key;
-    if (filter === 'week') {
-      const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-      key = mon.toISOString().split('T')[0];
-    } else {
-      key = row.date.substring(0, 7) + '-01';
-    }
-    if (!groups[key]) groups[key] = { date: key, ca_ttc: 0, montant_dlc: 0, couts_zone_frais: 0, ca_ht_frais: 0, pct_ca_ht_frais: 0, item_prep_frais: 0, tps_picking_moyen_frais: 0, vrai_manquants_frais: 0, _count: 0 };
-    const g = groups[key];
-    g.ca_ttc += (row.ca_ttc || 0);
-    g.montant_dlc += (row.montant_dlc || 0);
-    g.couts_zone_frais += (row.couts_zone_frais || 0);
-    g.ca_ht_frais += (row.ca_ht_frais || 0);
-    g.pct_ca_ht_frais += (row.pct_ca_ht_frais || 0);
-    g.item_prep_frais += (row.item_prep_frais || 0);
-    g.tps_picking_moyen_frais += (row.tps_picking_moyen_frais || 0);
-    g.vrai_manquants_frais += (row.vrai_manquants_frais || 0);
-    g._count++;
+// ── Supplier select ──
+function populateSupplierSelect(){
+  const sel=document.getElementById('kSupSelect');if(!sel||sel.options.length>1)return;
+  const ids=[...KPI_CONFIG.freshSupplierIds].sort((a,b)=>{
+    const na=KPI_CONFIG.supplierNames[a]||'',nb=KPI_CONFIG.supplierNames[b]||'';return na.localeCompare(nb);
   });
-  // Average the % and tps_picking
-  Object.values(groups).forEach(g => {
-    if (g._count > 0) {
-      g.pct_ca_ht_frais = g.pct_ca_ht_frais / g._count;
-      g.tps_picking_moyen_frais = g.tps_picking_moyen_frais / g._count;
-    }
+  ids.forEach(id=>{const n=KPI_CONFIG.supplierNames[id];if(!n)return;const o=document.createElement('option');o.value=id;o.textContent=n;sel.appendChild(o);});
+}
+
+// ── Filter ──
+function setKpiFilter(f){kpiFilter=f;document.getElementById('kfDay').classList.toggle('active',f==='day');document.getElementById('kfWeek').classList.toggle('active',f==='week');document.getElementById('kfMonth').classList.toggle('active',f==='month');renderKpiView();}
+
+function aggregateKpiRows(rows,filter){
+  if(filter==='day')return rows.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const g={};
+  rows.forEach(row=>{
+    const d=new Date(row.date);let k;
+    if(filter==='week'){const m=new Date(d);m.setDate(d.getDate()-((d.getDay()+6)%7));k=m.toISOString().split('T')[0];}
+    else k=row.date.substring(0,7)+'-01';
+    if(!g[k])g[k]={date:k,ca_ttc:0,montant_dlc:0,couts_zone_frais:0,ca_ht_frais:0,pct_ca_ht_frais:0,item_prep_frais:0,tps_picking_moyen_frais:0,vrai_manquants_frais:0,_c:0,_sup:{}};
+    const o=g[k];o.ca_ttc+=(row.ca_ttc||0);o.montant_dlc+=(row.montant_dlc||0);o.couts_zone_frais+=(row.couts_zone_frais||0);o.ca_ht_frais+=(row.ca_ht_frais||0);o.pct_ca_ht_frais+=(row.pct_ca_ht_frais||0);o.item_prep_frais+=(row.item_prep_frais||0);o.tps_picking_moyen_frais+=(row.tps_picking_moyen_frais||0);o.vrai_manquants_frais+=(row.vrai_manquants_frais||0);o._c++;
+    // Aggregate supplier data
+    Object.keys(row).forEach(rk=>{if(rk.startsWith('sup_')&&rk.endsWith('_ca')){if(!o._sup[rk])o._sup[rk]=0;o._sup[rk]+=(row[rk]||0);}if(rk.startsWith('sup_')&&rk.endsWith('_marge')){const mk=rk+'_sum';const ck=rk+'_cnt';if(!o._sup[mk])o._sup[mk]=0;if(!o._sup[ck])o._sup[ck]=0;o._sup[mk]+=(row[rk]||0);o._sup[ck]++;}});
   });
-  return Object.values(groups).sort((a, b) => b.date.localeCompare(a.date));
+  Object.values(g).forEach(o=>{if(o._c>0){o.pct_ca_ht_frais/=o._c;o.tps_picking_moyen_frais/=o._c;}
+    Object.keys(o._sup).forEach(sk=>{if(sk.endsWith('_marge_sum')){const base=sk.replace('_sum','');const cnt=sk.replace('_sum','_cnt');o._sup[base]=o._sup[cnt]?o._sup[sk]/o._sup[cnt]:0;}});
+  });
+  return Object.values(g).sort((a,b)=>b.date.localeCompare(a.date));
+}
+
+// ── Format helpers ──
+function fE(v){return typeof v==='number'&&v?v.toLocaleString('fr-FR',{maximumFractionDigits:0})+'€':'-';}
+function fE2(v){return typeof v==='number'&&v?v.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+'€':'-';}
+function fP(v){return typeof v==='number'&&v?v.toFixed(2)+'%':'-';}
+function fN(v){return typeof v==='number'&&v?Math.round(v).toLocaleString('fr-FR'):'-';}
+function fT(v){if(typeof v!=='number'||!v)return'-';if(v>=60)return Math.floor(v/60)+'m'+(v%60?(v%60)+'s':'');return v+'s';}
+
+function formatKpiDate(ds,filter){
+  const d=new Date(ds);const days=['dim','lun','mar','mer','jeu','ven','sam'];
+  if(filter==='month')return d.toLocaleDateString('fr-FR',{month:'short',year:'numeric'});
+  if(filter==='week')return 'Sem. '+ds.substring(5,10);
+  return days[d.getDay()]+' '+d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+}
+
+// ── Delta badge ──
+function deltaBadge(cur,prev,invert){
+  if(!prev||!cur||prev===0)return'';
+  const pct=((cur-prev)/Math.abs(prev)*100);
+  if(Math.abs(pct)<0.5)return'';
+  const good=invert?(pct<0):(pct>0);
+  const cls=good?'b-ok':'b-bad';
+  const sign=pct>0?'+':'';
+  return ' <span class="badge '+cls+'" style="font-size:9px">'+sign+pct.toFixed(1)+'%</span>';
 }
 
 // ── Render ──
+function renderKpiView(){
+  const supId=document.getElementById('kSupSelect')?.value||'';
+  if(supId)return renderSupplierView(supId);
 
-function formatKpiDate(ds, filter) {
-  const d = new Date(ds);
-  if (filter === 'month') return d.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
-  if (filter === 'week') return 'Sem. ' + ds.substring(5);
-  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+  const rows=aggregateKpiRows(kpiRawRows,kpiFilter);
+  // Summary cards with comparison
+  const tot={ca_ttc:0,montant_dlc:0,couts_zone_frais:0,ca_ht_frais:0,item_prep_frais:0,vrai_manquants_frais:0,pct_sum:0,tps_sum:0,c:0};
+  kpiRawRows.forEach(r=>{tot.ca_ttc+=(r.ca_ttc||0);tot.montant_dlc+=(r.montant_dlc||0);tot.couts_zone_frais+=(r.couts_zone_frais||0);tot.ca_ht_frais+=(r.ca_ht_frais||0);tot.item_prep_frais+=(r.item_prep_frais||0);tot.vrai_manquants_frais+=(r.vrai_manquants_frais||0);tot.pct_sum+=(r.pct_ca_ht_frais||0);tot.tps_sum+=(r.tps_picking_moyen_frais||0);tot.c++;});
+  const avgP=tot.c?(tot.pct_sum/tot.c):0,avgT=tot.c?(tot.tps_sum/tot.c):0;
+
+  document.getElementById('kpiCards').innerHTML=
+    '<div class="u-kpi"><div class="u-kpi-lbl">CA TTC</div><div class="u-kpi-val" style="color:var(--ca)">'+fE(tot.ca_ttc)+'</div></div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">CA HT Frais</div><div class="u-kpi-val" style="color:var(--ok)">'+fE(tot.ca_ht_frais)+'</div><div class="u-kpi-sub">'+fP(avgP)+' du CA</div></div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">DLC Sorti</div><div class="u-kpi-val" style="color:var(--warn)">'+fE(tot.montant_dlc)+'</div></div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">Coûts Zone</div><div class="u-kpi-val">'+fE(tot.couts_zone_frais)+'</div></div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">Items</div><div class="u-kpi-val" style="color:var(--units)">'+fN(tot.item_prep_frais)+'</div></div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">Tps Picking</div><div class="u-kpi-val">'+fT(Math.round(avgT))+'</div></div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">Manquants</div><div class="u-kpi-val" style="color:var(--rupture)">'+fN(tot.vrai_manquants_frais)+'</div></div>';
+
+  // Mini chart (CA HT Frais evolution)
+  renderMiniChart(rows.slice().reverse(),'ca_ht_frais','CA HT Frais');
+
+  // Table with deltas
+  const thead=document.getElementById('kpiTableHead');
+  thead.innerHTML='<tr><th class="ns">Date</th><th>CA TTC</th><th>DLC Sorti</th><th>Coûts Zone</th><th>CA HT Frais</th><th>% CA</th><th>Items</th><th>Picking</th><th>Manquants</th></tr>';
+  const tbody=document.getElementById('kpiTableBody');
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text3)">Aucune donnée</td></tr>';return;}
+
+  tbody.innerHTML=rows.map((r,i)=>{
+    const prev=rows[i+1]||null;
+    return '<tr>'+
+      '<td class="num" style="font-weight:500">'+formatKpiDate(r.date,kpiFilter)+'</td>'+
+      '<td class="num kv-ca">'+fE(r.ca_ttc)+deltaBadge(r.ca_ttc,prev?.ca_ttc)+'</td>'+
+      '<td class="num kv-warn">'+fE2(r.montant_dlc)+deltaBadge(r.montant_dlc,prev?.montant_dlc,true)+'</td>'+
+      '<td class="num">'+fE2(r.couts_zone_frais)+deltaBadge(r.couts_zone_frais,prev?.couts_zone_frais,true)+'</td>'+
+      '<td class="num kv-ok">'+fE(r.ca_ht_frais)+deltaBadge(r.ca_ht_frais,prev?.ca_ht_frais)+'</td>'+
+      '<td class="num">'+fP(r.pct_ca_ht_frais)+'</td>'+
+      '<td class="num">'+fN(r.item_prep_frais)+deltaBadge(r.item_prep_frais,prev?.item_prep_frais)+'</td>'+
+      '<td class="num">'+fT(typeof r.tps_picking_moyen_frais==='number'?Math.round(r.tps_picking_moyen_frais):0)+deltaBadge(r.tps_picking_moyen_frais,prev?.tps_picking_moyen_frais,true)+'</td>'+
+      '<td class="num">'+fN(r.vrai_manquants_frais)+deltaBadge(r.vrai_manquants_frais,prev?.vrai_manquants_frais,true)+'</td>'+
+      '</tr>';
+  }).join('');
+  document.getElementById('kpiPeriod').textContent=kpiRawRows.length+' jours';
 }
 
-function fE(v) { return typeof v === 'number' && v !== 0 ? v.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + '€' : '-'; }
-function fE2(v) { return typeof v === 'number' && v !== 0 ? v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '€' : '-'; }
-function fP(v) { return typeof v === 'number' && v !== 0 ? v.toFixed(2) + '%' : '-'; }
-function fN(v) { return typeof v === 'number' && v !== 0 ? Math.round(v).toLocaleString('fr-FR') : '-'; }
-function fT(v) { if (typeof v !== 'number' || v === 0) return '-'; if (v >= 60) { return Math.floor(v/60) + 'm' + (v%60 ? (v%60) + 's' : ''); } return v + 's'; }
+// ── Supplier view ──
+function renderSupplierView(supId){
+  const key='sup_'+supId;const name=KPI_CONFIG.supplierNames[supId]||supId;
+  const caKey=key+'_ca',margeKey=key+'_marge';
 
-function renderKpiView() {
-  const rows = aggregateKpiRows(kpiRawRows, kpiFilter);
-  // Summary cards
-  const totals = { ca_ttc: 0, montant_dlc: 0, couts_zone_frais: 0, ca_ht_frais: 0, item_prep_frais: 0, vrai_manquants_frais: 0, pct_sum: 0, tps_sum: 0, count: 0 };
-  kpiRawRows.forEach(r => {
-    totals.ca_ttc += (r.ca_ttc || 0);
-    totals.montant_dlc += (r.montant_dlc || 0);
-    totals.couts_zone_frais += (r.couts_zone_frais || 0);
-    totals.ca_ht_frais += (r.ca_ht_frais || 0);
-    totals.item_prep_frais += (r.item_prep_frais || 0);
-    totals.vrai_manquants_frais += (r.vrai_manquants_frais || 0);
-    totals.pct_sum += (r.pct_ca_ht_frais || 0);
-    totals.tps_sum += (r.tps_picking_moyen_frais || 0);
-    totals.count++;
-  });
-  const avgPct = totals.count ? (totals.pct_sum / totals.count) : 0;
-  const avgTps = totals.count ? (totals.tps_sum / totals.count) : 0;
+  const rows=aggregateKpiRows(kpiRawRows,kpiFilter);
+  // Get supplier totals
+  let totalCa=0,totalMarge=0,cnt=0;
+  kpiRawRows.forEach(r=>{totalCa+=(r[caKey]||0);if(r[margeKey]){totalMarge+=(r[margeKey]||0);cnt++;}});
+  const avgMarge=cnt?(totalMarge/cnt):0;
 
-  document.getElementById('kpiCards').innerHTML =
-    '<div class="u-kpi"><div class="u-kpi-lbl">CA TTC</div><div class="u-kpi-val" style="color:var(--ca)">' + fE(totals.ca_ttc) + '</div></div>' +
-    '<div class="u-kpi"><div class="u-kpi-lbl">CA HT Frais</div><div class="u-kpi-val" style="color:var(--ok)">' + fE(totals.ca_ht_frais) + '</div><div class="u-kpi-sub">' + fP(avgPct) + ' du CA</div></div>' +
-    '<div class="u-kpi"><div class="u-kpi-lbl">DLC Sorti</div><div class="u-kpi-val" style="color:var(--warn)">' + fE(totals.montant_dlc) + '</div></div>' +
-    '<div class="u-kpi"><div class="u-kpi-lbl">Coûts Zone</div><div class="u-kpi-val">' + fE(totals.couts_zone_frais) + '</div></div>' +
-    '<div class="u-kpi"><div class="u-kpi-lbl">Items</div><div class="u-kpi-val" style="color:var(--units)">' + fN(totals.item_prep_frais) + '</div></div>' +
-    '<div class="u-kpi"><div class="u-kpi-lbl">Tps Picking</div><div class="u-kpi-val">' + fT(Math.round(avgTps)) + '</div></div>' +
-    '<div class="u-kpi"><div class="u-kpi-lbl">Manquants</div><div class="u-kpi-val" style="color:var(--rupture)">' + fN(totals.vrai_manquants_frais) + '</div></div>';
+  document.getElementById('kpiCards').innerHTML=
+    '<div class="u-kpi"><div class="u-kpi-lbl">Fournisseur</div><div class="u-kpi-val" style="color:var(--ca);font-size:15px">'+name+'</div></div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">CA HT Total</div><div class="u-kpi-val" style="color:var(--ok)">'+fE(totalCa)+'</div></div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">Marge moy.</div><div class="u-kpi-val" style="color:var(--units)">'+fP(avgMarge)+'</div></div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">CA HT / jour</div><div class="u-kpi-val">'+fE(kpiRawRows.length?totalCa/kpiRawRows.length:0)+'</div></div>';
+
+  // Chart for this supplier
+  renderMiniChart(rows.slice().reverse(),null,'CA HT '+name,r=>(r._sup?.[caKey]||r[caKey]||0));
 
   // Table
-  const tbody = document.getElementById('kpiTableBody');
-  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text3)">Aucune donnée</td></tr>'; return; }
-  tbody.innerHTML = rows.map(r =>
-    '<tr>' +
-    '<td class="num" style="font-weight:500">' + formatKpiDate(r.date, kpiFilter) + '</td>' +
-    '<td class="num kv-ca">' + fE(r.ca_ttc) + '</td>' +
-    '<td class="num kv-warn">' + fE2(r.montant_dlc) + '</td>' +
-    '<td class="num">' + fE2(r.couts_zone_frais) + '</td>' +
-    '<td class="num kv-ok">' + fE(r.ca_ht_frais) + '</td>' +
-    '<td class="num">' + fP(r.pct_ca_ht_frais) + '</td>' +
-    '<td class="num">' + fN(r.item_prep_frais) + '</td>' +
-    '<td class="num">' + fT(typeof r.tps_picking_moyen_frais === 'number' ? Math.round(r.tps_picking_moyen_frais) : 0) + '</td>' +
-    '<td class="num">' + fN(r.vrai_manquants_frais) + '</td>' +
-    '</tr>'
-  ).join('');
-  document.getElementById('kpiPeriod').textContent = kpiRawRows.length + ' jours';
+  const thead=document.getElementById('kpiTableHead');
+  thead.innerHTML='<tr><th class="ns">Date</th><th>CA HT</th><th>Δ</th><th>Marge %</th><th>Δ</th></tr>';
+  const tbody=document.getElementById('kpiTableBody');
+  tbody.innerHTML=rows.map((r,i)=>{
+    const ca=r._sup?.[caKey]||r[caKey]||0;
+    const marge=r._sup?.[margeKey]||r[margeKey]||0;
+    const prev=rows[i+1]||null;
+    const prevCa=prev?._sup?.[caKey]||prev?.[caKey]||0;
+    const prevMarge=prev?._sup?.[margeKey]||prev?.[margeKey]||0;
+    return '<tr>'+
+      '<td class="num" style="font-weight:500">'+formatKpiDate(r.date,kpiFilter)+'</td>'+
+      '<td class="num kv-ok">'+fE2(ca)+'</td>'+
+      '<td class="num">'+deltaBadge(ca,prevCa)+'</td>'+
+      '<td class="num kv-units">'+fP(marge)+'</td>'+
+      '<td class="num">'+deltaBadge(marge,prevMarge)+'</td>'+
+      '</tr>';
+  }).join('');
+  document.getElementById('kpiPeriod').textContent=kpiRawRows.length+' jours · '+name;
 }
 
-function showKpiMessage(type, message) {
-  const msgDiv = document.getElementById('kpiMessage');
-  if (!msgDiv) return;
-  const colors = { success: 'var(--ok)', error: 'var(--rupture)', info: 'var(--blue)' };
-  msgDiv.style.background = 'color-mix(in srgb,' + colors[type] + ' 10%,transparent)';
-  msgDiv.style.border = '1px solid color-mix(in srgb,' + colors[type] + ' 25%,transparent)';
-  msgDiv.style.color = colors[type];
-  msgDiv.textContent = message;
-  msgDiv.style.display = 'block';
-  if (type !== 'info') setTimeout(() => msgDiv.style.display = 'none', 5000);
+// ── Mini SVG chart ──
+function renderMiniChart(rows,field,label,accessor){
+  const el=document.getElementById('kpiChart');if(!el)return;
+  const vals=rows.map(r=>accessor?accessor(r):(r[field]||0));
+  if(vals.length<2||vals.every(v=>v===0)){el.innerHTML='';return;}
+  const W=800,H=120,pad=40;const max=Math.max(...vals)*1.1||1;const min=0;
+  const step=(W-pad*2)/(vals.length-1);
+  const pts=vals.map((v,i)=>{const x=pad+i*step;const y=H-pad-((v-min)/(max-min))*(H-pad*2);return{x,y,v};});
+  const line=pts.map((p,i)=>(i===0?'M':'L')+p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ');
+  const area=line+' L'+pts[pts.length-1].x+','+(H-pad)+' L'+pts[0].x+','+(H-pad)+' Z';
+  // X axis labels (every ~7th point)
+  const xLabels=pts.filter((_,i)=>i%(Math.ceil(pts.length/8))===0||i===pts.length-1).map(p=>{
+    const idx=pts.indexOf(p);const r=rows[idx];
+    return '<text x="'+p.x+'" y="'+(H-8)+'" text-anchor="middle" fill="var(--text3)" font-size="9" font-family="Geist Mono,monospace">'+formatKpiDate(r.date,kpiFilter)+'</text>';
+  }).join('');
+  el.innerHTML='<div style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3);margin-bottom:4px">'+label+'</div>'+
+    '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:'+H+'px;background:var(--surface);border:1px solid var(--border);border-radius:8px">'+
+    '<defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--ok)" stop-opacity="0.3"/><stop offset="100%" stop-color="var(--ok)" stop-opacity="0"/></linearGradient></defs>'+
+    '<path d="'+area+'" fill="url(#cg)"/>'+
+    '<path d="'+line+'" fill="none" stroke="var(--ok)" stroke-width="2"/>'+
+    pts.map(p=>'<circle cx="'+p.x+'" cy="'+p.y+'" r="2.5" fill="var(--ok)"/>').join('')+
+    xLabels+
+    '</svg>';
 }
 
-// Auto-load on KPI tab switch
-(function() {
-  const origSwitch = window.switchTab;
-  if (!origSwitch) return;
-  window.switchTab = function(t) {
-    origSwitch(t);
-    if (t === 'k' && !DK && kpiRawRows.length === 0) {
-      refreshKpiTable();
-    }
-  };
+function showKpiMessage(type,msg){
+  const m=document.getElementById('kpiMessage');if(!m)return;
+  const c={success:'var(--ok)',error:'var(--rupture)',info:'var(--blue)'};
+  m.style.background='color-mix(in srgb,'+c[type]+' 10%,transparent)';m.style.border='1px solid color-mix(in srgb,'+c[type]+' 25%,transparent)';m.style.color=c[type];m.textContent=msg;m.style.display='block';
+  if(type!=='info')setTimeout(()=>m.style.display='none',5000);
+}
+
+// ── Auto-load when switching to KPI tab ──
+(function(){
+  const orig=window.switchTab;if(!orig)return;
+  window.switchTab=function(t){orig(t);if(t==='k'&&!kpiLoaded)refreshKpiTable();};
 })();
 
-async function kpiLoadAndGoDrop() {
-  const status = document.getElementById('kpiFetchStatus');
-  status.style.display = 'block';
-  status.textContent = '⏳ Chargement des KPIs...';
-  status.style.color = 'var(--blue)';
-  try {
-    const d = new Date(); d.setDate(d.getDate() - 1);
-    const dateStr = d.toISOString().split('T')[0];
-    const kpis = await fetchKpiForDate(dateStr);
-    await saveKpisToGoogleSheets(dateStr, kpis);
-    await refreshKpiTable();
-    status.textContent = '✅ KPIs du ' + dateStr + ' chargés !';
-    status.style.color = 'var(--ok)';
-    setTimeout(() => {
-      document.getElementById('drop').style.display = 'none';
-      document.getElementById('dash').style.display = 'block';
-      switchTab('k');
-    }, 800);
-  } catch (err) {
-    status.textContent = '❌ ' + err.message;
-    status.style.color = 'var(--rupture)';
-  }
+async function kpiLoadAndGoDrop(){
+  const s=document.getElementById('kpiFetchStatus');s.style.display='block';s.textContent='⏳ Chargement...';s.style.color='var(--blue)';
+  try{const d=new Date();d.setDate(d.getDate()-1);const ds=d.toISOString().split('T')[0];const k=await fetchKpiForDate(ds);await saveKpisToGoogleSheets(ds,k);try{await fetch(KPI_CONFIG.proxyUrl+'?action=trim_kpis&keep=60');}catch(e){}await refreshKpiTable();s.textContent='✅ '+ds+' chargé !';s.style.color='var(--ok)';setTimeout(()=>{document.getElementById('drop').style.display='none';document.getElementById('dash').style.display='block';switchTab('k');},800);}catch(e){s.textContent='❌ '+e.message;s.style.color='var(--rupture)';}
 }
 
 </script>
