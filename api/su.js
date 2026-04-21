@@ -179,8 +179,48 @@ module.exports = async function handler(req, res) {
       }
       return res.status(200).json({ csv: csvText });
 
+    } else if (action === 'fetch_kpis') {
+      // Fetch KPIs from dashboard
+      var dateMin = req.query.date_min || '';
+      var dateMax = req.query.date_max || '';
+      var agregation = req.query.agregation || 'day';
+      
+      if (!dateMin || !dateMax) {
+        return res.status(200).json({ error: 'date_min et date_max requis' });
+      }
+
+      var cacheKey = 'dashboardstat' + Date.now();
+      var dataTypes = ['checkoutstat', 'stockstat', 'packingstat', 'warehousezone', 'supplier'];
+      var baseUrl = BASE + '/stats/dashboard_ajax_stats?cache_key=' + cacheKey + 
+                    '&combination=and&user_type=&user_origin=&shipment_type=&payment_type=' +
+                    '&logistics_center_ids=9&agregation=' + agregation + 
+                    '&date_min=' + dateMin + '&date_max=' + dateMax;
+      
+      var promises = dataTypes.map(async function(dataType) {
+        var url = baseUrl + '&data_type=' + dataType;
+        try {
+          var response = await fetch(url, { headers: headers, redirect: 'follow' });
+          if (!response.ok) return { type: dataType, error: 'HTTP ' + response.status, html: '' };
+          var html = await response.text();
+          if (html.includes('FormSignin') || html.includes('action="/account/login"')) {
+            return { type: dataType, error: 'Session expirée', html: '' };
+          }
+          return { type: dataType, html: html, error: null };
+        } catch (err) {
+          return { type: dataType, error: err.message, html: '' };
+        }
+      });
+
+      var results = await Promise.all(promises);
+      var response = { date_min: dateMin, date_max: dateMax, agregation: agregation, data: {} };
+      results.forEach(function(result) {
+        response.data[result.type] = { html: result.html, error: result.error };
+      });
+
+      return res.status(200).json(response);
+
     } else {
-      return res.status(200).json({ error: 'action=list, bl, products, commandes, ou debug' });
+      return res.status(200).json({ error: 'action=list, bl, products, commandes, fetch_kpis ou debug' });
     }
   } catch (globalErr) {
     return res.status(200).json({ error: 'Crash: ' + globalErr.message });
