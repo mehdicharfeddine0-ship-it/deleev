@@ -492,7 +492,7 @@ td{padding:9px 10px;vertical-align:middle;}
             <th style="width:7%">Rupt.</th>
             <th style="width:8%">Heure(s)</th>
             <th style="width:9%">Réception</th>
-            <th style="width:6%">Produits</th>
+            <th style="width:6%">Stock/QI</th>
             <th style="width:9%">Montant</th>
             <th style="width:8%">Franco</th>
             <th style="width:8%">Statut</th>
@@ -1205,10 +1205,10 @@ function cRender(){
         ${supNameFromDict&&f.fournisseur&&supNameFromDict!==f.fournisseur?`<div class="cfid" style="color:var(--text3)">${f.fournisseur}</div>`:''}
         <div class="cfid">#${f.id}</div>
       </td>
-      <td style="text-align:center">${(function(){const rp=cRuptureData[f.id];if(rp===undefined||rp===null)return'<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3)">—</span>';const col=rp<=10?'var(--ok)':rp<=30?'var(--warn)':'var(--rupture)';return'<span class="badge" style="background:color-mix(in srgb,'+col+' 12%,transparent);color:'+col+';font-family:Geist Mono,monospace;font-size:11px">'+rp.toFixed(1)+'%</span>';})()}</td>
+      <td style="text-align:center">${(function(){const rp=cRuptureData[f.id];if(!rp)return'<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3)">—</span>';const col=rp.rupt<=10?'var(--ok)':rp.rupt<=30?'var(--warn)':'var(--rupture)';return'<span class="badge" style="background:color-mix(in srgb,'+col+' 12%,transparent);color:'+col+';font-family:Geist Mono,monospace;font-size:11px">'+rp.rupt.toFixed(1)+'%</span>';})()}</td>
       <td><span class="ctime">${times}</span></td>
       <td><span class="cnum" style="color:var(--text2);font-size:11px">${reception}</span></td>
-      <td class="cnum" style="color:var(--text2)">${f.nbProduits||'0'}</td>
+      <td class="cnum">${(function(){const rp=cRuptureData[f.id];if(!rp)return'<span style="color:var(--text3)">'+(f.nbProduits||'0')+'</span>';const col=rp.stock>=rp.qi?'var(--ok)':rp.stock>=rp.qi*0.7?'var(--warn)':'var(--rupture)';return'<span style="color:'+col+';font-weight:500">'+rp.stock+'</span><span style="color:var(--text3)">/'+rp.qi+'</span>';})()}</td>
       <td><a class="cmontant" href="${montantLink}" target="_blank">${montantFmt}</a></td>
       <td>${francoBadge}</td>
       <td>${statutBadge}${f.miseEnStock?`<br><span style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--text3)">↳ ${f.miseEnStock}</span>`:''}</td>
@@ -1694,6 +1694,7 @@ function resetAll(){
 // ══════════════════════════════════════════════════════════════
 let uSubTab='vue',uPalSort='colis',uExpandedPal=null;
 let uNbPrep=2,uCph=80,uTStart='06:00',uTEnd='';
+let uExcludedPals=new Set();
 let uParsed=null; // parsed JSON data
 
 const U_PROXY='/api/su';
@@ -2378,10 +2379,13 @@ function uRenderStock(ct){
 
   // Calculate frais/sec exclusion
   const fraisSecColis=md?md.fraisSecColis:0;
-  const effectiveColis=p.totalColis-fraisSecColis;
+  // Exclude manually checked palettes
+  const excludedColis=p.palettes.filter(pl=>uExcludedPals.has(pl.id)).reduce((s,pl)=>s+pl.colis,0);
+  const effectiveColis=p.totalColis-fraisSecColis-excludedColis;
   const avgColisPerPal=p.totalPalettes>0?p.totalColis/p.totalPalettes:1;
   const fraisSecPal=avgColisPerPal>0?Math.round(fraisSecColis/avgColisPerPal*10)/10:0;
-  const effectivePal=Math.max(0,Math.round((p.totalPalettes-fraisSecPal)*10)/10);
+  const excludedPalCount=uExcludedPals.size;
+  const effectivePal=Math.max(0,Math.round((p.totalPalettes-fraisSecPal-excludedPalCount)*10)/10);
 
   const rate=uCph*uNbPrep;
   const hrsNeeded=rate>0?effectiveColis/rate:999;
@@ -2409,6 +2413,12 @@ function uRenderStock(ct){
   if(fraisSecColis>0){
     fraisSecHtml=`<div style="background:color-mix(in srgb,var(--warn) 8%,transparent);border:1px solid color-mix(in srgb,var(--warn) 25%,transparent);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:11px;color:var(--text2)">
       <strong style="color:var(--warn)">🥚 Frais/Sec exclu :</strong> ${fi(fraisSecColis)} colis (~${fraisSecPal} pal.) · zone &lt;1000 · Calcul basé sur <strong style="color:var(--text)">${fi(effectiveColis)} colis frais</strong> (~${effectivePal} pal.)
+    </div>`;
+  }
+  if(excludedPalCount>0){
+    fraisSecHtml+=`<div style="background:color-mix(in srgb,var(--units) 8%,transparent);border:1px solid color-mix(in srgb,var(--units) 25%,transparent);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:11px;color:var(--text2)">
+      <strong style="color:var(--units)">✓ ${excludedPalCount} palette${excludedPalCount>1?'s':''} cochée${excludedPalCount>1?'s':''} (faites)</strong> — ${fi(excludedColis)} colis exclus du calcul
+      <button class="cbtn" onclick="uExcludedPals.clear();uRender()" style="margin-left:8px;font-size:10px;padding:2px 8px">Tout décocher</button>
     </div>`;
   }
 
@@ -2462,11 +2472,24 @@ function uRenderStock(ct){
   const maxPalColis=Math.max(...p.palettes.map(pl=>pl.colis),1);
   let cumColis=0;
   p.palettes.forEach(pal=>{
+    const excluded=uExcludedPals.has(pal.id);
+    if(excluded){
+      // Show excluded palette grayed out
+      h+=`<div class="u-timeline-row" style="opacity:0.4">
+        <span style="cursor:pointer;margin-right:4px" onclick="uExcludedPals.delete('${pal.id}');uRender()">☑</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);width:55px;text-decoration:line-through">#${pal.short}</span>
+        <div style="flex:1"><div class="u-bar-bg" style="height:5px"><div class="u-bar-fg" style="width:${(pal.colis/maxPalColis*100).toFixed(0)}%;background:var(--text3)"></div></div></div>
+        <span style="font-family:'Geist Mono',monospace;font-size:10px;width:35px;text-align:right;color:var(--text3);text-decoration:line-through">${pal.colis}</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:10px;width:95px;color:var(--ok)">✓ fait</span>
+      </div>`;
+      return;
+    }
     const sM=start+(cumColis/rate)*60;
     const eM=sM+(pal.colis/rate)*60;
     const overflows=end&&eM>end;
     cumColis+=pal.colis;
     h+=`<div class="u-timeline-row">
+      <span style="cursor:pointer;margin-right:4px;color:var(--text3)" onclick="uExcludedPals.add('${pal.id}');uRender()">☐</span>
       <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);width:55px">#${pal.short}</span>
       <div style="flex:1"><div class="u-bar-bg" style="height:5px"><div class="u-bar-fg" style="width:${(pal.colis/maxPalColis*100).toFixed(0)}%;background:${overflows?'var(--rupture)':uPalColor(pal.id)}"></div></div></div>
       <span style="font-family:'Geist Mono',monospace;font-size:10px;width:35px;text-align:right;color:var(--text2)">${pal.colis}</span>
