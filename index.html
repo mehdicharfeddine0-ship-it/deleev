@@ -277,7 +277,7 @@ td{padding:9px 10px;vertical-align:middle;}
       <input type="file" id="fC" accept=".csv">
       <div class="file-ok" id="fCname" style="display:none"></div>
       <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px" onclick="event.stopPropagation()">
-        <button class="ebtn" onclick="uFetchCommandes()" style="font-size:10px;padding:5px 12px;border-color:color-mix(in srgb,var(--units) 40%,transparent);color:var(--units);background:color-mix(in srgb,var(--units) 8%,transparent)">❄ Charger commandes</button>
+        <button class="ebtn" onclick="requireAuth(null,uFetchCommandes)" style="font-size:10px;padding:5px 12px;border-color:color-mix(in srgb,var(--units) 40%,transparent);color:var(--units);background:color-mix(in srgb,var(--units) 8%,transparent)">❄ Charger commandes</button>
         <div id="uCmdStatus" style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--text3);margin-top:4px;display:none"></div>
       </div>
     </div>
@@ -305,7 +305,7 @@ td{padding:9px 10px;vertical-align:middle;}
       <div class="drop-icon">↑</div>
       <div class="drop-text">Chargement automatique des <strong>KPIs</strong><br>depuis l'admin Deleev</div>
       <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px" onclick="event.stopPropagation()">
-        <button class="ebtn" onclick="kpiLoadAndGoDrop()" style="font-size:11px;padding:6px 14px;border-color:color-mix(in srgb,var(--ca) 40%,transparent);color:var(--ca);background:color-mix(in srgb,var(--ca) 8%,transparent)">📥 Charger J-1</button>
+        <button class="ebtn" onclick="requireAuth(null,kpiLoadAndGoDrop)" style="font-size:11px;padding:6px 14px;border-color:color-mix(in srgb,var(--ca) 40%,transparent);color:var(--ca);background:color-mix(in srgb,var(--ca) 8%,transparent)">📥 Charger J-1</button>
         <div id="kpiFetchStatus" style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);margin-top:6px;display:none"></div>
       </div>
     </div>
@@ -605,6 +605,7 @@ function checkPassword(){
     sessionStorage.setItem('dash_unlocked','1');
     document.getElementById('lockOverlay').style.display='none';
     if(pendingTab){switchTab(pendingTab);pendingTab=null;}
+    if(pendingAction){pendingAction();pendingAction=null;}
   }else{
     document.getElementById('lockError').style.display='block';
     document.getElementById('lockPwd').value='';
@@ -612,11 +613,11 @@ function checkPassword(){
     setTimeout(()=>document.getElementById('lockError').style.display='none',2000);
   }
 }
-function closeLock(){document.getElementById('lockOverlay').style.display='none';pendingTab=null;}
-let pendingTab=null;
-function requireAuth(tabId){
-  if(isUnlocked){switchTab(tabId);return;}
-  pendingTab=tabId;
+function closeLock(){document.getElementById('lockOverlay').style.display='none';pendingTab=null;pendingAction=null;}
+let pendingTab=null,pendingAction=null;
+function requireAuth(tabId,action){
+  if(isUnlocked){if(tabId)switchTab(tabId);if(action)action();return;}
+  pendingTab=tabId;pendingAction=action||null;
   document.getElementById('lockOverlay').style.display='flex';
   setTimeout(()=>document.getElementById('lockPwd').focus(),100);
 }
