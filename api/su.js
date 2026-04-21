@@ -219,8 +219,37 @@ module.exports = async function handler(req, res) {
 
       return res.status(200).json(response);
 
+    } else if (action === 'save_kpis') {
+      // Save KPIs to Google Sheets via proxy
+      var gSheetUrl = 'https://script.google.com/macros/s/AKfycbzWrYdVI5cuyP5iLOMBTmx6d_XPKaGR0h9_8nJUnVl8yBjQ0mYAXO7FZ2hEcBR7sUGu/exec';
+      var payload = req.body;
+      
+      try {
+        var gResp = await fetch(gSheetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        var gData = await gResp.json();
+        return res.status(200).json(gData);
+      } catch (err) {
+        return res.status(200).json({ error: 'Google Sheets error: ' + err.message });
+      }
+
+    } else if (action === 'load_kpis') {
+      // Load KPIs from Google Sheets via proxy
+      var gSheetUrl = 'https://script.google.com/macros/s/AKfycbzWrYdVI5cuyP5iLOMBTmx6d_XPKaGR0h9_8nJUnVl8yBjQ0mYAXO7FZ2hEcBR7sUGu/exec';
+      
+      try {
+        var gResp = await fetch(gSheetUrl);
+        var gData = await gResp.json();
+        return res.status(200).json(gData);
+      } catch (err) {
+        return res.status(200).json({ error: 'Google Sheets error: ' + err.message });
+      }
+
     } else {
-      return res.status(200).json({ error: 'action=list, bl, products, commandes, fetch_kpis ou debug' });
+      return res.status(200).json({ error: 'action=list, bl, products, commandes, fetch_kpis, save_kpis, load_kpis ou debug' });
     }
   } catch (globalErr) {
     return res.status(200).json({ error: 'Crash: ' + globalErr.message });
