@@ -158,6 +158,7 @@ module.exports = async function handler(req, res) {
           bio: !!d.bio,
           supplier_ref: supplierRef,
           group_id: d.stock_quantity_group_id || null,
+          zone: c9 ? c9.area : 0,
         });
       }
 
