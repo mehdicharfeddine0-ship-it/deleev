@@ -88,7 +88,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <div class="setup-card" id="readyCard" style="display:none">
       <h2>✅ Prêt à scanner</h2>
       <div style="font-size:12px;color:var(--text2);margin-bottom:12px" id="readySummary"></div>
-      <button class="btn btn-scan" onclick="startScanner()">📷 Lancer le scanner</button>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-scan" onclick="startScanner()" style="flex:1">📷 Caméra</button>
+        <button class="btn btn-scan" onclick="startPDA()" style="flex:1;background:var(--ok)">📟 Mode PDA</button>
+      </div>
     </div>
   </div>
 </div>
@@ -108,6 +111,35 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <button class="btn btn-scan" onclick="resumeScan()" style="flex:1">📷 Scanner suivant</button>
     </div>
     <div class="scanned-list" id="scannedList"></div>
+  </div>
+</div>
+
+<!-- PDA VIEW -->
+<div id="pdaView" style="display:none;flex-direction:column;min-height:100vh;min-height:100dvh">
+  <div class="scanner-top">
+    <button class="back" onclick="stopPDA()">← Retour</button>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ok);font-weight:600">📟 MODE PDA</span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2)" id="pdaScanCount">0 scanné(s)</span>
+  </div>
+  
+  <div style="padding:20px;flex:1;display:flex;flex-direction:column;gap:16px">
+    <!-- Scan input -->
+    <div style="background:var(--surface);border:2px solid var(--ok);border-radius:14px;padding:20px;text-align:center">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ok);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Scannez une palette</div>
+      <input id="pdaInput" type="text" inputmode="numeric" autocomplete="off" autofocus
+        style="width:100%;font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;text-align:center;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:14px;outline:none;letter-spacing:2px"
+        placeholder="Code-barres..."
+        onkeydown="if(event.key==='Enter'){pdaProcess();event.preventDefault();}">
+      <div id="pdaStatus" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);margin-top:10px;min-height:16px">En attente du scan...</div>
+    </div>
+
+    <!-- Result -->
+    <div id="pdaResult" style="display:none">
+      <div class="result-card" id="pdaResultCard"></div>
+    </div>
+
+    <!-- Scanned history -->
+    <div id="pdaHistory" style="flex:1;overflow-y:auto"></div>
   </div>
 </div>
 
@@ -384,6 +416,120 @@ function resumeScan(){
   scanning=true;
   if(scanner){try{scanner.resume();}catch(e){initCamera();}}
   else initCamera();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MODE PDA
+// ═══════════════════════════════════════════════════════════════
+
+function startPDA(){
+  document.getElementById('setupView').style.display='none';
+  document.getElementById('pdaView').style.display='flex';
+  document.getElementById('pdaResult').style.display='none';
+  document.getElementById('pdaHistory').innerHTML='';
+  document.getElementById('pdaScanCount').textContent='0 scanné(s)';
+  document.getElementById('pdaStatus').textContent='En attente du scan...';
+  document.getElementById('pdaStatus').style.color='var(--text3)';
+  setTimeout(()=>document.getElementById('pdaInput').focus(),200);
+}
+
+function stopPDA(){
+  document.getElementById('pdaView').style.display='none';
+  document.getElementById('setupView').style.display='block';
+}
+
+function pdaProcess(){
+  const input=document.getElementById('pdaInput');
+  const code=input.value.trim();
+  input.value='';
+  input.focus();
+  
+  if(!code||code.length<6){
+    document.getElementById('pdaStatus').textContent='Code trop court';
+    document.getElementById('pdaStatus').style.color='var(--warn)';
+    return;
+  }
+
+  if(navigator.vibrate)navigator.vibrate(50);
+
+  // Clean SSCC
+  let sscc=code.replace(/[\s\(\)]/g,'');
+  if(sscc.startsWith('00')&&sscc.length===20)sscc=sscc.substring(2);
+
+  // Find palette
+  let pal=palettes.find(p=>p.id===sscc);
+  if(!pal)pal=palettes.find(p=>p.id===code.replace(/[\s\(\)]/g,''));
+  if(!pal)pal=palettes.find(p=>p.id.slice(-12)===sscc.slice(-12));
+  if(!pal)pal=palettes.find(p=>p.short===sscc.slice(-6));
+
+  // Show result
+  const rc=document.getElementById('pdaResultCard');
+  document.getElementById('pdaResult').style.display='block';
+
+  if(!pal){
+    rc.innerHTML=`<div class="result-priority" style="background:var(--surface2)">
+      <div class="rank" style="color:var(--rupture)">?</div>
+      <div class="label" style="color:var(--rupture)">Palette non trouvée</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-top:8px">Code: ${code}</div>
+    </div>`;
+    document.getElementById('pdaStatus').textContent='❌ Non trouvée — scannez la suivante';
+    document.getElementById('pdaStatus').style.color='var(--rupture)';
+    return;
+  }
+
+  // Add to history
+  if(!scannedHistory.find(h=>h.id===pal.id)){
+    scannedHistory.push({id:pal.id,short:pal.short,priority:pal.priority,colis:pal.colis,ruptures:pal.ruptures,allFS:pal.allFS,fsColis:pal.fsColis});
+  }
+  document.getElementById('pdaScanCount').textContent=scannedHistory.length+' scanné(s)';
+  document.getElementById('scanCount').textContent=scannedHistory.length+' scanné(s)';
+
+  // Build result card (same as camera scan)
+  const prioColor=pal.priority<=3?'var(--rupture)':pal.priority<=7?'var(--warn)':'var(--ok)';
+  let html=`<div class="result-priority" style="background:color-mix(in srgb,${prioColor} 8%,transparent)">
+    <div class="rank" style="color:${prioColor}">${pal.priority}</div>
+    <div class="of">/ ${palPriority.length}</div>
+    <div class="label">Priorité</div>
+  </div>
+  <div class="result-stats">
+    <div><div class="stat-val" style="color:var(--units)">${pal.colis}</div><div class="stat-lbl">Colis</div></div>
+    <div><div class="stat-val" style="color:${pal.ruptures>0?'var(--rupture)':'var(--ok)'}">${pal.ruptures}</div><div class="stat-lbl">Ruptures</div></div>
+    <div><div class="stat-val">${pal.items.length}</div><div class="stat-lbl">Réf.</div></div>
+  </div>
+  <div class="result-info">
+    <div class="info-row"><span>Palette</span><span>#${pal.short}</span></div>
+    <div class="info-row"><span>ID complet</span><span style="font-size:9px">${pal.id}</span></div>
+    ${pal.matchedCount>0?`<div class="info-row"><span>Matchés</span><span style="color:var(--ok)">${pal.matchedCount}/${pal.items.length}</span></div>`:''}
+  </div>`;
+
+  rc.innerHTML=html;
+
+  document.getElementById('pdaStatus').textContent='✅ #'+pal.short+' — Priorité '+pal.priority+' — scannez la suivante';
+  document.getElementById('pdaStatus').style.color='var(--ok)';
+
+  // Update PDA history
+  pdaUpdateHistory();
+  
+  // Update camera scanner history too
+  updateScannedList();
+}
+
+function pdaUpdateHistory(){
+  const el=document.getElementById('pdaHistory');
+  if(!scannedHistory.length){el.innerHTML='';return;}
+  let h='<div style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">Historique ('+scannedHistory.length+')</div>';
+  scannedHistory.slice().reverse().forEach(s=>{
+    const prioColor=s.priority<=3?'var(--rupture)':s.priority<=7?'var(--warn)':'var(--ok)';
+    h+=`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:6px">
+      <span style="font-family:JetBrains Mono,monospace;font-size:14px;font-weight:700;color:${prioColor};min-width:28px;text-align:center">${s.priority}</span>
+      <span style="font-family:JetBrains Mono,monospace;font-size:12px;font-weight:500">#${s.short}</span>
+      <span style="flex:1"></span>
+      <span style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text2)">${s.colis} col.</span>
+      ${s.ruptures>0?`<span style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--rupture)">${s.ruptures} rupt.</span>`:`<span style="color:var(--ok)">✓</span>`}
+      ${s.allFS?'<span class="tag-fs">FS</span>':''}
+    </div>`;
+  });
+  el.innerHTML=h;
 }
 </script>
 </body>
