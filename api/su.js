@@ -282,6 +282,87 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({ error: 'Google Sheets error: ' + err.message });
       }
 
+    } else if (action === 'probe_ruptures') {
+      // Debug: see the raw HTML structure of suppliers_v2
+      try {
+        var rupUrl = BASE + '/stats/stock_monitor/suppliers_v2?logistics_center_ids=9';
+        var rupResp = await fetch(rupUrl, { headers: headers, redirect: 'follow' });
+        var rupHtml = await rupResp.text();
+        if (rupHtml.includes('FormSignin')) return res.status(200).json({ error: 'Session expirée' });
+        
+        // Find first data row with a supplier ID
+        var firstRow = rupHtml.match(/<tr[^>]*>[\s\S]*?supplier\/(\d+)[\s\S]*?<\/tr>/i);
+        var sample = firstRow ? firstRow[0].substring(0, 1500) : 'No supplier row found';
+        
+        // Also get column headers
+        var theadMatch = rupHtml.match(/<thead[^>]*>([\s\S]*?)<\/thead>/i);
+        var headers_html = theadMatch ? theadMatch[1].substring(0, 1000) : 'No thead found';
+        
+        return res.status(200).json({ 
+          pageLength: rupHtml.length,
+          hasLogin: rupHtml.includes('FormSignin'),
+          sampleRow: sample,
+          headers: headers_html
+        });
+      } catch (err) {
+        return res.status(200).json({ error: err.message });
+      }
+
+    } else if (action === 'fetch_ruptures') {
+      // Scrape stock_monitor/suppliers_v2 for real rupture % per supplier
+      try {
+        var rupUrl = BASE + '/stats/stock_monitor/suppliers_v2?logistics_center_ids=9';
+        var rupResp = await fetch(rupUrl, { headers: headers, redirect: 'follow' });
+        if (!rupResp.ok) return res.status(200).json({ error: 'HTTP ' + rupResp.status });
+        var rupHtml = await rupResp.text();
+        if (rupHtml.includes('FormSignin') || rupHtml.includes('action="/account/login"')) {
+          return res.status(200).json({ error: 'Session expirée' });
+        }
+        
+        // Parse the table rows - each supplier row has: name, #id, nb_stock, nb_qi, %rupture, nb_qi_reel, %rupture_reelle, ca_ht, marge, indice
+        var suppliers = {};
+        var rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+        var rowMatch;
+        while ((rowMatch = rowRe.exec(rupHtml)) !== null) {
+          var row = rowMatch[1];
+          // Extract supplier ID from link like /supplier/1695/ or #1695
+          var idMatch = row.match(/supplier\/(\d+)|#(\d+)/);
+          if (!idMatch) continue;
+          var supId = idMatch[1] || idMatch[2];
+          
+          // Extract all td values
+          var tds = [];
+          var tdRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+          var tdMatch;
+          while ((tdMatch = tdRe.exec(row)) !== null) {
+            tds.push(tdMatch[1].replace(/<[^>]+>/g, '').trim());
+          }
+          
+          // Find the rupture reelle % - it's typically the 6th column (index 5)
+          // Columns: nb_stock, nb_qi, %rupture, nb_qi_reel, %rupture_reelle, ca_ht, marge, indice
+          // We need to find the column with "%" that corresponds to rupture reelle
+          if (tds.length >= 5) {
+            // Try to find rupture reelle % - look for % values
+            var ruptPct = 0;
+            for (var t = 0; t < tds.length; t++) {
+              if (tds[t].includes('%') && t >= 3) {
+                // Second % column is rupture reelle
+                var pctVal = parseFloat(tds[t].replace('%', '').replace(',', '.').trim());
+                if (!isNaN(pctVal)) {
+                  ruptPct = pctVal;
+                  // Don't break - we want the last % which is rupture reelle
+                }
+              }
+            }
+            suppliers[supId] = ruptPct;
+          }
+        }
+        
+        return res.status(200).json({ suppliers: suppliers });
+      } catch (err) {
+        return res.status(200).json({ error: 'Rupture scrape error: ' + err.message });
+      }
+
     } else if (action === 'trim_kpis') {
       // Trim KPIs to keep only the last N days
       var keep = parseInt(req.query.keep) || 60;
