@@ -2474,13 +2474,12 @@ function uRenderStock(ct){
   p.palettes.forEach(pal=>{
     const excluded=uExcludedPals.has(pal.id);
     if(excluded){
-      // Show excluded palette grayed out
-      h+=`<div class="u-timeline-row" style="opacity:0.4">
-        <span style="cursor:pointer;margin-right:4px" onclick="uExcludedPals.delete('${pal.id}');uRender()">☑</span>
-        <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);width:55px;text-decoration:line-through">#${pal.short}</span>
-        <div style="flex:1"><div class="u-bar-bg" style="height:5px"><div class="u-bar-fg" style="width:${(pal.colis/maxPalColis*100).toFixed(0)}%;background:var(--text3)"></div></div></div>
-        <span style="font-family:'Geist Mono',monospace;font-size:10px;width:35px;text-align:right;color:var(--text3);text-decoration:line-through">${pal.colis}</span>
-        <span style="font-family:'Geist Mono',monospace;font-size:10px;width:95px;color:var(--ok)">✓ fait</span>
+      h+=`<div class="u-timeline-row" style="opacity:0.35;padding:4px 0">
+        <div onclick="uExcludedPals.delete('${pal.id}');uRender()" style="cursor:pointer;width:32px;height:32px;border-radius:7px;border:2px solid var(--ok);background:var(--ok);display:flex;align-items:center;justify-content:center;flex-shrink:0"><span style="color:#000;font-size:16px;font-weight:800">✓</span></div>
+        <span style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--text3);width:60px;text-decoration:line-through">#${pal.short}</span>
+        <div style="flex:1"><div class="u-bar-bg" style="height:6px"><div class="u-bar-fg" style="width:${(pal.colis/maxPalColis*100).toFixed(0)}%;background:var(--text3)"></div></div></div>
+        <span style="font-family:'Geist Mono',monospace;font-size:11px;width:40px;text-align:right;color:var(--text3);text-decoration:line-through">${pal.colis}</span>
+        <span style="font-family:'Geist Mono',monospace;font-size:11px;width:60px;color:var(--ok);font-weight:600;text-align:center">fait ✓</span>
       </div>`;
       return;
     }
@@ -2488,12 +2487,12 @@ function uRenderStock(ct){
     const eM=sM+(pal.colis/rate)*60;
     const overflows=end&&eM>end;
     cumColis+=pal.colis;
-    h+=`<div class="u-timeline-row">
-      <span style="cursor:pointer;margin-right:4px;color:var(--text3)" onclick="uExcludedPals.add('${pal.id}');uRender()">☐</span>
-      <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);width:55px">#${pal.short}</span>
-      <div style="flex:1"><div class="u-bar-bg" style="height:5px"><div class="u-bar-fg" style="width:${(pal.colis/maxPalColis*100).toFixed(0)}%;background:${overflows?'var(--rupture)':uPalColor(pal.id)}"></div></div></div>
-      <span style="font-family:'Geist Mono',monospace;font-size:10px;width:35px;text-align:right;color:var(--text2)">${pal.colis}</span>
-      <span style="font-family:'Geist Mono',monospace;font-size:10px;width:95px;color:${overflows?'var(--rupture)':'var(--text3)'}">${uTimeStr(sM)} → ${uTimeStr(eM)}</span>
+    h+=`<div class="u-timeline-row" style="padding:4px 0">
+      <div onclick="uExcludedPals.add('${pal.id}');uRender()" style="cursor:pointer;width:32px;height:32px;border-radius:7px;border:2px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:border-color .15s" onmouseover="this.style.borderColor='var(--ok)'" onmouseout="this.style.borderColor='var(--border)'"></div>
+      <span style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--text2);width:60px;font-weight:500">#${pal.short}</span>
+      <div style="flex:1"><div class="u-bar-bg" style="height:6px"><div class="u-bar-fg" style="width:${(pal.colis/maxPalColis*100).toFixed(0)}%;background:${overflows?'var(--rupture)':uPalColor(pal.id)}"></div></div></div>
+      <span style="font-family:'Geist Mono',monospace;font-size:11px;width:40px;text-align:right;color:var(--text);font-weight:500">${pal.colis}</span>
+      <span style="font-family:'Geist Mono',monospace;font-size:11px;width:100px;color:${overflows?'var(--rupture)':'var(--text3)'};text-align:right">${uTimeStr(sM)} → ${uTimeStr(eM)}</span>
     </div>`;
   });
   h+='</div>';
