@@ -2123,14 +2123,20 @@ function uRender(){
 function uGetPalAnalysis(){
   const p=uParsed,md=p.matchData;
   return p.palettes.map(pal=>{
-    if(!md)return{...pal,ruptureRate:0,ruptureCount:0,matchedCount:0};
+    if(!md)return{...pal,ruptureRate:0,ruptureCount:0,matchedCount:0,fsColis:0,fraisColis:pal.colis};
     const items=pal.items.map(item=>{
       const d=md.details.find(dd=>dd.gtin===item.gtin&&dd.supports.includes(pal.id));
-      return{...item,stock:d?.stock??null,matched:d?.matched??false,rupture:d?.rupture??false};
+      return{...item,stock:d?.stock??null,matched:d?.matched??false,rupture:d?.rupture??false,
+        zone:d?.zone??0,isFraisSec:d?.isFraisSec??false};
     });
     const mc=items.filter(i=>i.matched).length;
     const rc=items.filter(i=>i.rupture).length;
-    return{...pal,itemDetails:items,ruptureRate:mc>0?rc/mc:0,ruptureCount:rc,matchedCount:mc};
+    // Count frais/sec colis on this palette
+    const fsColis=items.filter(i=>i.isFraisSec).reduce((s,i)=>s+i.qty,0);
+    const fraisColis=pal.colis-fsColis;
+    const allFS=fsColis>0&&fraisColis<=0;
+    return{...pal,itemDetails:items,ruptureRate:mc>0?rc/mc:0,ruptureCount:rc,matchedCount:mc,
+      fsColis,fraisColis,allFS};
   });
 }
 
@@ -2140,10 +2146,15 @@ function uRenderVue(ct){
   h+='<div class="u-grid">';
   pals.forEach(pal=>{
     const rc=md?(pal.ruptureRate>.3?'var(--rupture)':pal.ruptureRate>.1?'var(--warn)':'var(--ok)'):'var(--text3)';
-    h+=`<div class="u-grid-card" onclick="uExpandedPal='${pal.id}';uSubTab='pal';uRender()" style="border-left:3px solid ${uPalColor(pal.id)}">
+    // Frais/sec label
+    let fsLabel='';
+    if(pal.allFS)fsLabel='<div style="font-size:9px;font-weight:600;color:var(--warn);margin-top:3px">🥚 palette frais/sec</div>';
+    else if(pal.fsColis>0)fsLabel=`<div style="font-size:9px;color:var(--warn);margin-top:3px">${pal.colis} (dont ${pal.fsColis} FS)</div>`;
+    h+=`<div class="u-grid-card" onclick="uExpandedPal='${pal.id}';uSubTab='pal';uRender()" style="border-left:3px solid ${pal.allFS?'var(--warn)':uPalColor(pal.id)}">
       <div style="display:flex;justify-content:space-between"><span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3)">#${pal.short}</span><span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text2)">${pal.items.length} réf</span></div>
       <div style="font-size:18px;font-weight:700;margin-top:2px">${pal.colis}</div>
       <div style="font-size:10px;color:var(--text3)">colis</div>
+      ${fsLabel}
       ${md?`<div style="margin-top:6px"><div class="u-bar-bg" style="height:3px"><div class="u-bar-fg" style="width:${(pal.ruptureRate*100).toFixed(0)}%;background:${rc}"></div></div><div style="font-family:'Geist Mono',monospace;font-size:9px;color:${rc};margin-top:2px">${pal.ruptureCount>0?pal.ruptureCount+' rupt. ('+(pal.ruptureRate*100).toFixed(1)+'%)':'✓ OK'}</div></div>`:''}
     </div>`;
   });
@@ -2181,12 +2192,17 @@ function uRenderPal(ct){
     const isOpen=uExpandedPal===pal.id;
     const rc=md?(pal.ruptureRate>.3?'var(--rupture)':pal.ruptureRate>.1?'var(--warn)':'var(--ok)'):'var(--text3)';
     const items=pal.itemDetails||pal.items;
-    h+=`<div class="u-pal-card" style="border-left:3px solid ${uPalColor(pal.id)}">
+    // Frais/sec label for header
+    let fsTag='';
+    if(pal.allFS)fsTag='<span style="font-size:9px;font-weight:600;color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent);padding:2px 6px;border-radius:4px;margin-left:6px">🥚 frais/sec</span>';
+    else if(pal.fsColis>0)fsTag=`<span style="font-size:9px;color:var(--warn);margin-left:6px">(dont ${pal.fsColis} FS)</span>`;
+    h+=`<div class="u-pal-card" style="border-left:3px solid ${pal.allFS?'var(--warn)':uPalColor(pal.id)}">
       <div class="u-pal-hdr" onclick="uExpandedPal=uExpandedPal==='${pal.id}'?null:'${pal.id}';uRender()">
         <div style="display:flex;align-items:center;gap:10px">
           <span style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--text3)">#${pal.short}</span>
           <span style="font-weight:700;font-size:15px">${pal.colis}</span>
           <span style="font-size:11px;color:var(--text2)">colis · ${pal.items.length} réf</span>
+          ${fsTag}
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           ${md&&pal.matchedCount>0?`<span class="u-pill" style="color:${rc};background:color-mix(in srgb,${rc} 12%,transparent)">${(pal.ruptureRate*100).toFixed(1)}% · ${pal.ruptureCount}/${pal.matchedCount}</span>`:''}
@@ -2199,8 +2215,9 @@ function uRenderPal(ct){
         ${md?'<th style="text-align:right">Stock</th><th style="text-align:center">État</th>':''}
       </tr></thead><tbody>`;
       items.forEach(item=>{
-        h+=`<tr>
-          <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.bio?'<span style="color:var(--ok);margin-right:3px">🌱</span>':''}${item.name}</td>
+        const fsIcon=item.isFraisSec?'<span style="color:var(--warn);font-size:9px;margin-right:3px" title="Frais/Sec zone<1000">FS</span>':'';
+        h+=`<tr${item.isFraisSec?' style="opacity:.6"':''}>
+          <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.bio?'<span style="color:var(--ok);margin-right:3px">🌱</span>':''}${fsIcon}${item.name}</td>
           <td style="text-align:right;font-family:'Geist Mono',monospace;font-weight:600">${item.qty}</td>
           <td style="text-align:right;font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3)">${item.gtin}</td>
           ${md?`<td style="text-align:right;font-family:'Geist Mono',monospace;font-weight:600;color:${item.stock===null||item.stock===undefined?'var(--text3)':item.stock>0?'var(--text)':'var(--rupture)'}">${item.stock??'—'}</td>
