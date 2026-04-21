@@ -190,12 +190,13 @@ module.exports = async function handler(req, res) {
       }
 
       var cacheKey = 'dashboardstat' + Date.now();
-      var dataTypes = ['checkoutstat', 'stockstat', 'packingstat', 'warehousezone', 'supplier'];
+      var dataTypes = ['stockstat', 'packingstat', 'warehousezone', 'supplier'];
       var baseUrl = BASE + '/stats/dashboard_ajax_stats?cache_key=' + cacheKey + 
                     '&combination=and&user_type=&user_origin=&shipment_type=&payment_type=' +
                     '&logistics_center_ids=9&agregation=' + agregation + 
                     '&date_min=' + dateMin + '&date_max=' + dateMax;
       
+      // Fetch AJAX stats in parallel
       var promises = dataTypes.map(async function(dataType) {
         var url = baseUrl + '&data_type=' + dataType;
         try {
@@ -211,9 +212,31 @@ module.exports = async function handler(req, res) {
         }
       });
 
-      var results = await Promise.all(promises);
+      // Also fetch dashboard_new page for CA TTC (server-rendered)
+      var dashPromise = (async function() {
+        try {
+          var dashUrl = BASE + '/stats/dashboard_new?combination=and&user_type=&user_origin=&shipment_type=&payment_type=&logistics_center_ids=9&agregation=' + agregation + '&date_min=' + dateMin + '&date_max=' + dateMax + '&submit_filters=Afficher+les+stats';
+          var dashResp = await fetch(dashUrl, { headers: headers, redirect: 'follow' });
+          if (!dashResp.ok) return { type: 'dashboard', error: 'HTTP ' + dashResp.status, html: '' };
+          var dashHtml = await dashResp.text();
+          if (dashHtml.includes('FormSignin') || dashHtml.includes('action="/account/login"')) {
+            return { type: 'dashboard', error: 'Session expirée', html: '' };
+          }
+          return { type: 'dashboard', html: dashHtml, error: null };
+        } catch (err) {
+          return { type: 'dashboard', error: err.message, html: '' };
+        }
+      })();
+
+      var allResults = await Promise.all([...promises, dashPromise]);
       var response = { date_min: dateMin, date_max: dateMax, agregation: agregation, data: {} };
-      results.forEach(function(result) {
+      allResults.forEach(function(result) {
+        // For dashboard page, only keep the relevant table portion to reduce payload
+        if (result.type === 'dashboard' && result.html) {
+          // Extract just the tbody with ca_ttc, ca_ht etc. to keep payload small
+          var tableMatch = result.html.match(/<table[^>]*id="[^"]*agregation[^"]*"[^>]*>([\s\S]*?)<\/table>/i);
+          result.html = tableMatch ? tableMatch[0] : result.html.substring(0, 50000);
+        }
         response.data[result.type] = { html: result.html, error: result.error };
       });
 
