@@ -222,7 +222,17 @@ module.exports = async function handler(req, res) {
           if (dashHtml.includes('FormSignin') || dashHtml.includes('action="/account/login"')) {
             return { type: 'dashboard', error: 'Session expirée', html: '' };
           }
-          return { type: 'dashboard', html: dashHtml, error: null };
+          // Extract CA TTC value server-side to avoid sending huge HTML
+          // Pattern: <tr ... id="ca_ttc"> ... <td class="ca_ttc ... table-info"> ... <strong>VALUE</strong> ... </td>
+          var caMatch = dashHtml.match(/<tr[^>]*id="ca_ttc"[^>]*>[\s\S]*?<td[^>]*class="[^"]*table-info[^"]*"[^>]*>([\s\S]*?)<\/td>/i);
+          var caVal = '0';
+          if (caMatch) {
+            var strongMatch = caMatch[1].match(/<strong>([^<]+)<\/strong>/);
+            caVal = strongMatch ? strongMatch[1].trim() : caMatch[1].replace(/<[^>]+>/g, '').trim();
+          }
+          // Return minimal HTML just for the parser
+          var miniHtml = '<tr id="ca_ttc"><td class="ca_ttc table-info"><strong>' + caVal + '</strong></td></tr>';
+          return { type: 'dashboard', html: miniHtml, error: null };
         } catch (err) {
           return { type: 'dashboard', error: err.message, html: '' };
         }
@@ -231,12 +241,6 @@ module.exports = async function handler(req, res) {
       var allResults = await Promise.all([...promises, dashPromise]);
       var response = { date_min: dateMin, date_max: dateMax, agregation: agregation, data: {} };
       allResults.forEach(function(result) {
-        // For dashboard page, only keep the relevant table portion to reduce payload
-        if (result.type === 'dashboard' && result.html) {
-          // Extract just the tbody with ca_ttc, ca_ht etc. to keep payload small
-          var tableMatch = result.html.match(/<table[^>]*id="[^"]*agregation[^"]*"[^>]*>([\s\S]*?)<\/table>/i);
-          result.html = tableMatch ? tableMatch[0] : result.html.substring(0, 50000);
-        }
         response.data[result.type] = { html: result.html, error: result.error };
       });
 
