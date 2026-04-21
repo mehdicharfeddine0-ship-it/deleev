@@ -282,6 +282,22 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({ error: 'Google Sheets error: ' + err.message });
       }
 
+    } else if (action === 'trim_kpis') {
+      // Trim KPIs to keep only the last N days
+      var keep = parseInt(req.query.keep) || 60;
+      var gSheetUrl = 'https://script.google.com/macros/s/AKfycbzWrYdVI5cuyP5iLOMBTmx6d_XPKaGR0h9_8nJUnVl8yBjQ0mYAXO7FZ2hEcBR7sUGu/exec';
+      try {
+        var gResp = await fetch(gSheetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'trim', keep: keep })
+        });
+        var gData = await gResp.json();
+        return res.status(200).json(gData);
+      } catch (err) {
+        return res.status(200).json({ error: 'Trim error: ' + err.message });
+      }
+
     } else if (action === 'probe_kpis') {
       var dateMin = req.query.date_min || '2026-04-20';
       var dateMax = req.query.date_max || '2026-04-20';
