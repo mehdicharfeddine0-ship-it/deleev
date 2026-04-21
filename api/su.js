@@ -313,7 +313,6 @@ module.exports = async function handler(req, res) {
       }
 
     } else if (action === 'fetch_ruptures') {
-      // Scrape stock_monitor/suppliers_v2 for real rupture % per supplier
       try {
         var rupUrl = BASE + '/stats/stock_monitor/suppliers_v2?logistics_center_ids=9';
         var rupResp = await fetch(rupUrl, { headers: headers, redirect: 'follow' });
@@ -323,46 +322,36 @@ module.exports = async function handler(req, res) {
           return res.status(200).json({ error: 'Session expirée' });
         }
         
-        // Parse the table rows - each supplier row has: name, #id, nb_stock, nb_qi, %rupture, nb_qi_reel, %rupture_reelle, ca_ht, marge, indice
+        var tbodyMatch = rupHtml.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/i);
+        if (!tbodyMatch) return res.status(200).json({ error: 'tbody not found', suppliers: {} });
+        var tbody = tbodyMatch[1];
+        
         var suppliers = {};
-        var rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-        var rowMatch;
-        while ((rowMatch = rowRe.exec(rupHtml)) !== null) {
-          var row = rowMatch[1];
-          // Extract supplier ID from link like /supplier/1695/ or #1695
-          var idMatch = row.match(/supplier\/(\d+)|#(\d+)/);
+        var trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+        var trMatch;
+        while ((trMatch = trRe.exec(tbody)) !== null) {
+          var row = trMatch[1];
+          // Extract supplier ID from supplier=ID in href or #ID in <small>
+          var idMatch = row.match(/supplier=(\d+)|#(\d+)/);
           if (!idMatch) continue;
           var supId = idMatch[1] || idMatch[2];
           
-          // Extract all td values
+          // Extract all td text values
           var tds = [];
           var tdRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-          var tdMatch;
-          while ((tdMatch = tdRe.exec(row)) !== null) {
-            tds.push(tdMatch[1].replace(/<[^>]+>/g, '').trim());
+          var tdM;
+          while ((tdM = tdRe.exec(row)) !== null) {
+            tds.push(tdM[1].replace(/<[^>]+>/g, '').trim());
           }
           
-          // Find the rupture reelle % - it's typically the 6th column (index 5)
-          // Columns: nb_stock, nb_qi, %rupture, nb_qi_reel, %rupture_reelle, ca_ht, marge, indice
-          // We need to find the column with "%" that corresponds to rupture reelle
-          if (tds.length >= 5) {
-            // Try to find rupture reelle % - look for % values
-            var ruptPct = 0;
-            for (var t = 0; t < tds.length; t++) {
-              if (tds[t].includes('%') && t >= 3) {
-                // Second % column is rupture reelle
-                var pctVal = parseFloat(tds[t].replace('%', '').replace(',', '.').trim());
-                if (!isNaN(pctVal)) {
-                  ruptPct = pctVal;
-                  // Don't break - we want the last % which is rupture reelle
-                }
-              }
-            }
-            suppliers[supId] = ruptPct;
+          // TD[5] = % rupture réelle (e.g. "35,94 %")
+          if (tds.length >= 6) {
+            var pctStr = tds[5].replace('%', '').replace(/\s/g, '').replace(',', '.');
+            suppliers[supId] = parseFloat(pctStr) || 0;
           }
         }
         
-        return res.status(200).json({ suppliers: suppliers });
+        return res.status(200).json({ suppliers: suppliers, count: Object.keys(suppliers).length });
       } catch (err) {
         return res.status(200).json({ error: 'Rupture scrape error: ' + err.message });
       }
