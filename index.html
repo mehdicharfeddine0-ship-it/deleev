@@ -241,7 +241,19 @@ td{padding:9px 10px;vertical-align:middle;}
 </head>
 <body>
 
-<div id="drop">
+<!-- ECRAN MOT DE PASSE -->
+<div id="lockScreen" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:40px;background:var(--bg)">
+  <div style="font-size:40px;opacity:.5">🔒</div>
+  <div style="font-size:20px;font-weight:600">Dashboard <em style="color:var(--ca)">Frais</em></div>
+  <div style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--text3)">Entrez le mot de passe pour accéder</div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input id="lockPwd" type="password" placeholder="Mot de passe" style="font-family:'Geist Mono',monospace;font-size:14px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:10px 16px;width:220px;outline:none" onkeydown="if(event.key==='Enter')checkPassword()">
+    <button onclick="checkPassword()" style="background:var(--ca);color:#000;border:none;border-radius:9px;padding:10px 20px;font-family:'Geist',sans-serif;font-size:14px;font-weight:600;cursor:pointer">→</button>
+  </div>
+  <div id="lockError" style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--rupture);display:none">Mot de passe incorrect</div>
+</div>
+
+<div id="drop" style="display:none">
   <div style="text-align:center">
     <div class="drop-title">Dashboard <em>Frais</em></div>
     <div class="drop-sub" style="margin-top:6px">Ventes · Produits · Commandes · Système U · KPI</div>
@@ -591,6 +603,33 @@ td{padding:9px 10px;vertical-align:middle;}
 
 <script>
 const PU='https://products.app.deleev.com/products/';
+
+// ── MOT DE PASSE ──
+const PWD_HASH='frais2026';// Le mot de passe en clair ici, change-le
+let isUnlocked=sessionStorage.getItem('dash_unlocked')==='1';
+
+function checkPassword(){
+  const input=document.getElementById('lockPwd').value;
+  if(input===PWD_HASH){
+    isUnlocked=true;
+    sessionStorage.setItem('dash_unlocked','1');
+    document.getElementById('lockScreen').style.display='none';
+    document.getElementById('drop').style.display='';
+  }else{
+    document.getElementById('lockError').style.display='block';
+    document.getElementById('lockPwd').value='';
+    document.getElementById('lockPwd').focus();
+    setTimeout(()=>document.getElementById('lockError').style.display='none',2000);
+  }
+}
+
+// Auto-unlock if session is valid
+if(isUnlocked){
+  document.addEventListener('DOMContentLoaded',()=>{
+    document.getElementById('lockScreen').style.display='none';
+    document.getElementById('drop').style.display='';
+  });
+}
 let DV=null,DP=null,DC=null,DU=null,DK=null,tab='v';
 let gran='week',per='ALL',sV='ca_desc',qV='',expId=null,rupOnly=false;
 let sP='dvs_asc',qP='',fCats=new Set(),fTypo='',fColis='';
