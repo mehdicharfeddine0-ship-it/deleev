@@ -119,8 +119,8 @@ td{padding:9px 10px;vertical-align:middle;}
 .rf-link{font-family:'Geist Mono',monospace;font-size:10px;color:var(--warn);text-decoration:none;border:1px solid color-mix(in srgb,var(--warn) 30%,transparent);border-radius:5px;padding:2px 8px;display:inline-flex;align-items:center;gap:4px;cursor:pointer;transition:all .12s;white-space:nowrap;}
 .rf-link:hover{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 15%,transparent);}
 .supplier-tag{font-family:'Geist Mono',monospace;font-size:11px;color:var(--ca);background:color-mix(in srgb,var(--ca) 10%,transparent);border:1px solid color-mix(in srgb,var(--ca) 25%,transparent);border-radius:6px;padding:3px 10px;}
-#vV,#vP,#vC{display:none;}
-#vV.on,#vP.on,#vC.on{display:block;}
+#vV,#vP,#vC,#vK{display:none;}
+#vV.on,#vP.on,#vC.on,#vK.on{display:block;}
 
 /* CAT EDITOR */
 .cat-panel{padding:12px 24px;background:var(--surface);border-bottom:1px solid var(--border);}
@@ -497,7 +497,9 @@ td{padding:9px 10px;vertical-align:middle;}
         <div id="uContent"></div>
       </div>
     </div>
+  </div>
 
+  <div id="vK" style="display:none">
     <!-- ONGLET KPI FRAIS -->
     <div id="kNoData" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:80px 40px;min-height:60vh">
       <div style="font-size:48px;opacity:.3">📈</div>
@@ -555,7 +557,6 @@ td{padding:9px 10px;vertical-align:middle;}
         </table>
       </div>
     </div>
-
   </div>
 </div>
 
@@ -754,6 +755,7 @@ function switchTab(t){
   document.getElementById('vP').classList.toggle('on',t==='p');
   document.getElementById('vC').classList.toggle('on',t==='c');
   document.getElementById('vU').classList.toggle('on',t==='u');
+  document.getElementById('vK').classList.toggle('on',t==='k');
   document.getElementById('kpiV').style.display=t==='v'?'flex':'none';
   document.getElementById('kpiP').style.display=t==='p'?'flex':'none';
   if(t==='c'){
