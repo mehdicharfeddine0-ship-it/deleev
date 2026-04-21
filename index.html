@@ -2768,7 +2768,17 @@ function renderKpiView(){
   function avg7(arr,k){const v=arr.filter(r=>r[k]);return v.length?v.reduce((s,r)=>s+(r[k]||0),0)/v.length:0;}
   const w1={ca_ttc:sum7(last7,'ca_ttc'),ca_ht_frais:sum7(last7,'ca_ht_frais'),montant_dlc:sum7(last7,'montant_dlc'),couts_zone_frais:sum7(last7,'couts_zone_frais'),tps:avg7(last7,'tps_picking_moyen_frais')};
   const w0={ca_ttc:sum7(prev7,'ca_ttc'),ca_ht_frais:sum7(prev7,'ca_ht_frais'),montant_dlc:sum7(prev7,'montant_dlc'),couts_zone_frais:sum7(prev7,'couts_zone_frais'),tps:avg7(prev7,'tps_picking_moyen_frais')};
-  function cardDelta(cur,prev,inv){if(!prev)return'';const p=((cur-prev)/Math.abs(prev)*100);if(Math.abs(p)<0.1)return'';const good=inv?(p<0):(p>0);return'<div class="u-kpi-sub" style="color:'+(good?'var(--ok)':'var(--rupture)')+'">'+(p>0?'+':'')+p.toFixed(1)+'% vs S-1</div>';}
+  function cardDelta(cur,prev,invert){
+    if(prev===undefined||prev===null||prev===0||!cur)return'';
+    const pct=((cur-prev)/Math.abs(prev)*100);
+    if(Math.abs(pct)<0.1)return'';
+    const sign=pct>0?'+':'';
+    // For CA: up=green, down=red. For costs (invert=true): up=red, down=green
+    let color;
+    if(invert){color=pct>0?'var(--rupture)':'var(--ok)';}
+    else{color=pct>0?'var(--ok)':'var(--rupture)';}
+    return'<div class="u-kpi-sub" style="color:'+color+'">'+sign+pct.toFixed(1)+'% vs S-1</div>';
+  }
 
   document.getElementById('kpiCards').innerHTML=
     '<div class="u-kpi"><div class="u-kpi-lbl">CA TTC · 7j</div><div class="u-kpi-val" style="color:var(--ca)">'+fE(w1.ca_ttc)+'</div>'+cardDelta(w1.ca_ttc,w0.ca_ttc)+'</div>'+
