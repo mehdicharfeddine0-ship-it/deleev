@@ -446,6 +446,7 @@ td{padding:9px 10px;vertical-align:middle;}
       <button class="rbtn" onclick="resetAll()">↩ Déposer un fichier</button>
     </div>
     <div id="cDash" style="display:none">
+      <div style="position:sticky;top:52px;z-index:100;background:var(--bg)">
       <div class="cday-nav" id="cDayNav">
         <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px">Jour d'envoi</span>
         <button class="cday-btn" data-day="lundi" onclick="cSelectDay('lundi')">Lun <span class="cpill" id="cpill-lundi">0</span></button>
@@ -469,7 +470,7 @@ td{padding:9px 10px;vertical-align:middle;}
       <div style="padding:8px 24px">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px">Calculateur</span>
-          <input id="calcBase" type="number" placeholder="Facteur" style="font-family:'Geist Mono',monospace;font-size:13px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:6px 10px;width:100px;outline:none" oninput="calcVariation()">
+          <input id="calcBase" type="number" placeholder="Valeur" style="font-family:'Geist Mono',monospace;font-size:13px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:6px 10px;width:100px;outline:none" oninput="calcVariation()">
           <div style="display:flex;gap:4px;align-items:center">
             <button id="calcDown" onclick="setCalcDir('down')" style="font-family:'Geist Mono',monospace;font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--rupture);background:color-mix(in srgb,var(--rupture) 15%,transparent);color:var(--rupture);cursor:pointer;font-weight:600">▼</button>
             <button id="calcUp" onclick="setCalcDir('up')" style="font-family:'Geist Mono',monospace;font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text3);cursor:pointer;font-weight:600">▲</button>
@@ -481,18 +482,20 @@ td{padding:9px 10px;vertical-align:middle;}
           <span id="calcDelta" style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--text3)"></span>
         </div>
       </div>
+      </div>
       <div class="ctw">
         <table class="ctable">
           <thead><tr>
+            <th style="width:3%">✓</th>
             <th style="width:3%">#</th>
-            <th style="width:21%">Fournisseur</th>
+            <th style="width:19%">Fournisseur</th>
             <th style="width:9%">Heure(s)</th>
             <th style="width:10%">Réception</th>
             <th style="width:7%">Produits</th>
             <th style="width:10%">Montant</th>
             <th style="width:9%">Franco</th>
             <th style="width:9%">Statut</th>
-            <th style="width:22%">Routines</th>
+            <th style="width:21%">Routines</th>
           </tr></thead>
           <tbody id="cTbody"></tbody>
         </table>
@@ -1104,6 +1107,7 @@ function cInitDash(){
 
 function cSelectDay(d){
   cDay=d;
+  cCheckedSuppliers=cLoadChecked();
   document.querySelectorAll('.cday-btn').forEach(b=>b.classList.toggle('active',b.dataset.day===d));
   cRender();
 }
@@ -1112,6 +1116,16 @@ function cSetFilter(f){
   cFilter=f;
   document.querySelectorAll('.cfbtn').forEach(b=>b.classList.toggle('on',b.dataset.cf===f));
   cRender();
+}
+
+// Checked suppliers per day (persisted in localStorage)
+let cCheckedSuppliers=new Set();
+function cCheckedKey(){return'cmd_checked_'+cDay+'_'+new Date().toISOString().split('T')[0];}
+function cLoadChecked(){try{const s=localStorage.getItem(cCheckedKey());return s?new Set(JSON.parse(s)):new Set();}catch(e){return new Set();}}
+function cSaveChecked(){try{localStorage.setItem(cCheckedKey(),JSON.stringify([...cCheckedSuppliers]));}catch(e){}}
+function cToggleCheck(id,td){
+  if(cCheckedSuppliers.has(id))cCheckedSuppliers.delete(id);else cCheckedSuppliers.add(id);
+  cSaveChecked();cRender();
 }
 
 function cRender(){
@@ -1129,8 +1143,10 @@ function cRender(){
   const blockedC=rows.filter(f=>f.statut==='blocked').length;
   const autoC=rows.filter(f=>f.cmdAuto==='Oui').length;
   const francoC=rows.filter(f=>f.francoAtteint==='Oui').length;
+  const checkedC=rows.filter(f=>cCheckedSuppliers.has(f.id)).length;
   document.getElementById('cStatsBar').innerHTML=`
     <div class="cstat"><div class="cstat-lbl">Fournisseurs</div><div class="cstat-val">${rows.length}</div></div>
+    <div class="cstat"><div class="cstat-lbl">✓ Validés</div><div class="cstat-val" style="color:${checkedC===rows.length&&rows.length>0?'var(--ok)':'var(--units)'}">${checkedC}/${rows.length}</div></div>
     <div class="cstat"><div class="cstat-lbl">⛔ Bloqués</div><div class="cstat-val" style="color:${blockedC>0?'var(--rupture)':'var(--ok)'}">${blockedC}</div></div>
     <div class="cstat"><div class="cstat-lbl">Cmde auto</div><div class="cstat-val" style="color:var(--ok)">${autoC}</div></div>
     <div class="cstat"><div class="cstat-lbl">Franco atteint</div><div class="cstat-val" style="color:var(--ok)">${francoC}</div></div>`;
@@ -1170,10 +1186,17 @@ function cRender(){
     const francoBadge=`<span class="badge ${francoOui?'b-ok':'b-bad'}">${francoOui?'✓ Oui':'✗ Non'}</span>${f.franco?`<br><span style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--text3)">seuil ${parseFloat(f.franco).toLocaleString('fr-FR')} €</span>`:''}`;
 
     const tr=document.createElement('tr');
+    const checked=cCheckedSuppliers.has(f.id);
+    if(checked)tr.style.background='color-mix(in srgb,var(--ok) 6%,transparent)';
     // Nom fournisseur enrichi depuis SUPPLIERS
     const supNameFromDict=getSupplierName(f.id);
     const displayName=supNameFromDict||f.fournisseur;
     tr.innerHTML=`
+      <td style="text-align:center;cursor:pointer" onclick="cToggleCheck('${f.id}',this)">
+        <div style="width:20px;height:20px;border-radius:5px;border:1.5px solid ${checked?'var(--ok)':'var(--border)'};background:${checked?'var(--ok)':'transparent'};display:flex;align-items:center;justify-content:center;margin:0 auto;transition:all .15s">
+          ${checked?'<span style="color:#000;font-size:12px;font-weight:700">✓</span>':''}
+        </div>
+      </td>
       <td class="cnum" style="color:var(--text3)">${i+1}</td>
       <td>
         <a class="cfname" href="${supplierLink}" target="_blank">${displayName}</a>
@@ -2697,19 +2720,22 @@ function renderKpiView(){
   if(supId)return renderSupplierView(supId);
 
   const rows=aggregateKpiRows(kpiRawRows,kpiFilter);
-  // Summary cards with comparison
-  const tot={ca_ttc:0,montant_dlc:0,couts_zone_frais:0,ca_ht_frais:0,item_prep_frais:0,vrai_manquants_frais:0,pct_sum:0,tps_sum:0,c:0};
-  kpiRawRows.forEach(r=>{tot.ca_ttc+=(r.ca_ttc||0);tot.montant_dlc+=(r.montant_dlc||0);tot.couts_zone_frais+=(r.couts_zone_frais||0);tot.ca_ht_frais+=(r.ca_ht_frais||0);tot.item_prep_frais+=(r.item_prep_frais||0);tot.vrai_manquants_frais+=(r.vrai_manquants_frais||0);tot.pct_sum+=(r.pct_ca_ht_frais||0);tot.tps_sum+=(r.tps_picking_moyen_frais||0);tot.c++;});
-  const avgP=tot.c?(tot.pct_sum/tot.c):0,avgT=tot.c?(tot.tps_sum/tot.c):0;
+
+  // Summary cards: last 7 days vs previous 7 days
+  const sorted=kpiRawRows.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  const last7=sorted.slice(0,7), prev7=sorted.slice(7,14);
+  function sum7(arr,k){return arr.reduce((s,r)=>s+(r[k]||0),0);}
+  function avg7(arr,k){const v=arr.filter(r=>r[k]);return v.length?v.reduce((s,r)=>s+(r[k]||0),0)/v.length:0;}
+  const w1={ca_ttc:sum7(last7,'ca_ttc'),ca_ht_frais:sum7(last7,'ca_ht_frais'),montant_dlc:sum7(last7,'montant_dlc'),couts_zone_frais:sum7(last7,'couts_zone_frais'),tps:avg7(last7,'tps_picking_moyen_frais')};
+  const w0={ca_ttc:sum7(prev7,'ca_ttc'),ca_ht_frais:sum7(prev7,'ca_ht_frais'),montant_dlc:sum7(prev7,'montant_dlc'),couts_zone_frais:sum7(prev7,'couts_zone_frais'),tps:avg7(prev7,'tps_picking_moyen_frais')};
+  function cardDelta(cur,prev,inv){if(!prev)return'';const p=((cur-prev)/Math.abs(prev)*100);if(Math.abs(p)<0.1)return'';const good=inv?(p<0):(p>0);return'<div class="u-kpi-sub" style="color:'+(good?'var(--ok)':'var(--rupture)')+'">'+(p>0?'+':'')+p.toFixed(1)+'% vs S-1</div>';}
 
   document.getElementById('kpiCards').innerHTML=
-    '<div class="u-kpi"><div class="u-kpi-lbl">CA TTC</div><div class="u-kpi-val" style="color:var(--ca)">'+fE(tot.ca_ttc)+'</div></div>'+
-    '<div class="u-kpi"><div class="u-kpi-lbl">CA HT Frais</div><div class="u-kpi-val" style="color:var(--ok)">'+fE(tot.ca_ht_frais)+'</div><div class="u-kpi-sub">'+fP(avgP)+' du CA</div></div>'+
-    '<div class="u-kpi"><div class="u-kpi-lbl">DLC Sorti</div><div class="u-kpi-val" style="color:var(--warn)">'+fE(tot.montant_dlc)+'</div></div>'+
-    '<div class="u-kpi"><div class="u-kpi-lbl">Coûts Zone</div><div class="u-kpi-val">'+fE(tot.couts_zone_frais)+'</div></div>'+
-    '<div class="u-kpi"><div class="u-kpi-lbl">Items</div><div class="u-kpi-val" style="color:var(--units)">'+fN(tot.item_prep_frais)+'</div></div>'+
-    '<div class="u-kpi"><div class="u-kpi-lbl">Tps Picking</div><div class="u-kpi-val">'+fT(Math.round(avgT))+'</div></div>'+
-    '<div class="u-kpi"><div class="u-kpi-lbl">Manquants</div><div class="u-kpi-val" style="color:var(--rupture)">'+fN(tot.vrai_manquants_frais)+'</div></div>';
+    '<div class="u-kpi"><div class="u-kpi-lbl">CA TTC · 7j</div><div class="u-kpi-val" style="color:var(--ca)">'+fE(w1.ca_ttc)+'</div>'+cardDelta(w1.ca_ttc,w0.ca_ttc)+'</div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">CA HT Frais · 7j</div><div class="u-kpi-val" style="color:var(--ok)">'+fE(w1.ca_ht_frais)+'</div>'+cardDelta(w1.ca_ht_frais,w0.ca_ht_frais)+'</div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">DLC Sorti · 7j</div><div class="u-kpi-val" style="color:var(--warn)">'+fE(w1.montant_dlc)+'</div>'+cardDelta(w1.montant_dlc,w0.montant_dlc,true)+'</div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">Coûts Zone · 7j</div><div class="u-kpi-val">'+fE(w1.couts_zone_frais)+'</div>'+cardDelta(w1.couts_zone_frais,w0.couts_zone_frais,true)+'</div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">Tps Picking · 7j</div><div class="u-kpi-val">'+fT(Math.round(w1.tps))+'</div>'+cardDelta(w1.tps,w0.tps,true)+'</div>';
 
   // Mini chart (CA HT Frais evolution)
   renderMiniChart(rows.slice().reverse(),'ca_ht_frais','CA HT Frais');
