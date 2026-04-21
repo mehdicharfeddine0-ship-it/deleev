@@ -249,11 +249,10 @@ module.exports = async function handler(req, res) {
       }
 
     } else if (action === 'probe_kpis') {
-      // Test multiple data_types to find which one contains CA TTC
       var dateMin = req.query.date_min || '2026-04-20';
       var dateMax = req.query.date_max || '2026-04-20';
       var cacheKey = 'probe' + Date.now();
-      var candidates = ['orderstat', 'revenuestat', 'financialstat', 'generalstat', 'salestat', 'castat', 'deliverystat', 'marginstat', 'coststat', 'summarystat'];
+      var candidates = ['checkout', 'order', 'revenue', 'financial', 'global', 'sale', 'ca', 'delivery', 'margin', 'cost', 'summary', 'kpi', 'stat', 'stats', 'all', 'total', 'turnover', 'income', 'billing', 'invoice'];
       var baseUrl = BASE + '/stats/dashboard_ajax_stats?cache_key=' + cacheKey +
                     '&combination=and&user_type=&user_origin=&shipment_type=&payment_type=' +
                     '&logistics_center_ids=9&agregation=day' +
@@ -265,20 +264,29 @@ module.exports = async function handler(req, res) {
         try {
           var r = await fetch(baseUrl + '&data_type=' + dt, { headers: headers, redirect: 'follow' });
           var txt = await r.text();
-          if (txt.includes('FormSignin')) {
-            results[dt] = { status: r.status, error: 'Session expirée', length: 0 };
-          } else {
-            // Extract all <strong> labels
-            var lbls = [];
-            var lRe = /<strong>([^<]+)<\/strong>/g;
-            var lm;
-            while ((lm = lRe.exec(txt)) !== null) lbls.push(lm[1].trim());
-            results[dt] = { status: r.status, length: txt.length, labels: lbls.slice(0, 20), hasCA_TTC: txt.includes('CA TTC') };
-          }
+          results[dt] = { status: r.status, length: txt.length, hasCA_TTC: txt.includes('CA TTC'), snippet: txt.substring(0, 80) };
         } catch (err) {
           results[dt] = { error: err.message };
         }
       }
+
+      // Also try to scrape the main dashboard page directly
+      try {
+        var dashUrl = BASE + '/stats/dashboard?logistics_center_ids=9&agregation=day&date_min=' + dateMin + '&date_max=' + dateMax + '&combination=and&user_type=&user_origin=&shipment_type=&payment_type=';
+        var dashResp = await fetch(dashUrl, { headers: headers, redirect: 'follow' });
+        var dashHtml = await dashResp.text();
+        var hasCA = dashHtml.includes('CA TTC');
+        // Extract the CA TTC value if found
+        var caMatch = null;
+        if (hasCA) {
+          var caIdx = dashHtml.indexOf('CA TTC');
+          caMatch = dashHtml.substring(caIdx - 50, caIdx + 300);
+        }
+        results['_dashboard_page'] = { status: dashResp.status, length: dashHtml.length, hasCA_TTC: hasCA, around_ca_ttc: caMatch, hasLogin: dashHtml.includes('FormSignin') };
+      } catch (err) {
+        results['_dashboard_page'] = { error: err.message };
+      }
+
       return res.status(200).json(results);
 
     } else {
