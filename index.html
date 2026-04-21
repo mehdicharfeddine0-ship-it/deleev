@@ -244,7 +244,7 @@ td{padding:9px 10px;vertical-align:middle;}
 <div id="drop">
   <div style="text-align:center">
     <div class="drop-title">Dashboard <em>Frais</em></div>
-    <div class="drop-sub" style="margin-top:6px">Ventes · Produits · Commandes · Système U</div>
+    <div class="drop-sub" style="margin-top:6px">Ventes · Produits · Commandes · Système U · KPI</div>
   </div>
   <div class="drop-zones">
     <div class="drop-zone" id="dzV">
@@ -298,6 +298,15 @@ td{padding:9px 10px;vertical-align:middle;}
         <div id="uBLList" style="margin-top:8px;display:none;max-height:250px;overflow-y:auto"></div>
       </div>
     </div>
+    <div class="drop-zone" id="dzK" style="border-color:color-mix(in srgb,var(--ca) 40%,transparent)">
+      <div class="dz-label" style="color:var(--ca)">📈 KPI Frais</div>
+      <div class="drop-icon">↑</div>
+      <div class="drop-text">Chargement automatique des <strong>KPIs</strong><br>depuis l'admin Deleev</div>
+      <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px" onclick="event.stopPropagation()">
+        <button class="ebtn" onclick="kpiLoadAndGo()" style="font-size:11px;padding:6px 14px;border-color:color-mix(in srgb,var(--ca) 40%,transparent);color:var(--ca);background:color-mix(in srgb,var(--ca) 8%,transparent)">📥 Charger J-1</button>
+        <div id="kpiFetchStatus" style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);margin-top:6px;display:none"></div>
+      </div>
+    </div>
   </div>
   <button class="btn-launch" id="btnL" onclick="launch()">Analyser →</button>
   <div class="err-box" id="errBox"></div>
@@ -311,6 +320,7 @@ td{padding:9px 10px;vertical-align:middle;}
       <button class="tab" id="tabP" onclick="switchTab('p')">📦 Produits</button>
       <button class="tab" id="tabC" onclick="switchTab('c')">❄ Commandes Frais</button>
       <button class="tab" id="tabU" onclick="switchTab('u')">🧊 Système U</button>
+      <button class="tab" id="tabK" onclick="switchTab('k')">📈 KPI Frais</button>
     </div>
     <div class="kpis" id="kpiV">
       <div class="kpi"><div class="kpi-lbl">CA TTC</div><div class="kpi-val kv-ca" id="kca">—</div></div>
@@ -487,12 +497,59 @@ td{padding:9px 10px;vertical-align:middle;}
         <div id="uContent"></div>
       </div>
     </div>
+
+    <!-- ONGLET KPI FRAIS -->
+    <div id="kNoData" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:80px 40px;min-height:60vh">
+      <div style="font-size:48px;opacity:.3">📈</div>
+      <div style="font-size:16px;font-weight:500;color:var(--text2)">Aucune donnée KPI</div>
+      <div style="font-family:'Geist Mono',monospace;font-size:12px;color:var(--text3);text-align:center;max-width:400px">
+        Cliquez sur "Charger J-1" pour récupérer les KPIs de la veille
+      </div>
+      <button class="ebtn" onclick="loadKpiJMinus1()" style="margin-top:16px">📥 Charger J-1</button>
+    </div>
+
+    <div id="kDash" style="display:none">
+      <div class="controls">
+        <span class="cl">Actions</span>
+        <button class="ebtn" onclick="loadKpiJMinus1()">📥 Charger J-1</button>
+        <button class="rbtn" onclick="refreshKpiTable()">🔄 Actualiser</button>
+        <div class="vsep"></div>
+        <span class="cl">Période</span>
+        <span class="rc" id="kpiPeriod">—</span>
+      </div>
+
+      <div style="padding:0 24px">
+        <div id="kpiMessage" style="display:none;margin-top:16px;font-family:'Geist Mono',monospace;font-size:12px;padding:12px 16px;border-radius:8px"></div>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th class="ns">Date</th>
+              <th>CA TTC</th>
+              <th>Montant DLC</th>
+              <th>Coûts Frais</th>
+              <th>CA HT Frais</th>
+              <th>% CA Frais</th>
+              <th>Items Frais</th>
+              <th>Temps (s)</th>
+              <th>Manquants</th>
+            </tr>
+          </thead>
+          <tbody id="kpiTableBody">
+            <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text3)">Chargement...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 </div>
 
 <script>
 const PU='https://products.app.deleev.com/products/';
-let DV=null,DP=null,DC=null,DU=null,tab='v';
+let DV=null,DP=null,DC=null,DU=null,DK=null,tab='v';
 let gran='week',per='ALL',sV='ca_desc',qV='',expId=null,rupOnly=false;
 let sP='dvs_asc',qP='',fCats=new Set(),fTypo='',fColis='';
 let pPage=1,pPerPage=50,pExpandedGroup=null,fQiOnly=false;
@@ -680,6 +737,7 @@ function switchTab(t){
   document.getElementById('tabP').classList.toggle('active',t==='p');
   document.getElementById('tabC').classList.toggle('active',t==='c');
   document.getElementById('tabU').classList.toggle('active',t==='u');
+  document.getElementById('tabK').classList.toggle('active',t==='k');
   document.getElementById('vV').classList.toggle('on',t==='v');
   document.getElementById('vP').classList.toggle('on',t==='p');
   document.getElementById('vC').classList.toggle('on',t==='c');
@@ -693,6 +751,10 @@ function switchTab(t){
   if(t==='u'){
     document.getElementById('uNoData').style.display=DU?'none':'flex';
     document.getElementById('uDash').style.display=DU?'block':'none';
+  }
+  if(t==='k'){
+    document.getElementById('kNoData').style.display=DK?'none':'flex';
+    document.getElementById('kDash').style.display=DK?'block':'none';
   }
 }
 
@@ -2426,6 +2488,28 @@ let _lastProdCSV=null;
     sel.appendChild(opt);
   });
 })();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODULE KPI FRAIS
+// ═══════════════════════════════════════════════════════════════════════════
+
+const KPI_CONFIG={googleSheetsUrl:'https://script.google.com/macros/s/AKfycbzWrYdVI5cuyP5iLOMBTmx6d_XPKaGR0h9_8nJUnVl8yBjQ0mYAXO7FZ2hEcBR7sUGu/exec',proxyUrl:'https://su-dashboard.vercel.app/api/su.js',freshSupplierIds:new Set(['174','257','306','621','1754','94','232','325','566','1719','102','415','108','43','2285','147','2319','305','1777','2231','261','195','329','80','1757','1778','297','581','525','270','168','34','141','151','2234','1854','123','133','107','2317','1666','196','105','97','341','364','363','172','12','266','1756','224','377','167','204','201','10','153','471','192','199','1718','451','413','269','1746','1755','339','144','1695']),supplierNames:{"10":"CNER","12":"Desailly","34":"Frais devant - Maxime Geraud","43":"Anthès découpe","80":"Mammafiore PRECO fromage lundi > lundi s1","94":"Norocean","97":"Sturia - Sturgeon","102":"St Jean","105":"Panache des Landes","107":"Beillevaire crèmerie A pour C","108":"Kalios","123":"Pâte feuilletée françois","133":"Anthes everyday","141":"Maison conquet","144":"Ferme Montchervet","147":"Mammafiore EVERYDAY/SEC","151":"Briau produits","153":"Beillevaire fromage découpe A pour C","167":"Hardouin TRAITEUR","168":"Sedisal (Itsaluz)","172":"Vitafrais","174":"Jay & Joy (Les Nouveaux Affineurs)","192":"Système U frais","195":"Yarden","196":"Desailly précommande","199":"Boucherie BE A pour B","201":"Beillevaire traiteur","204":"Maison Conquet précommande","224":"HOANAM","232":"Bellota-Bellota (Byzance)","257":"Biodis Frais","261":"Comptoir du Caviar","266":"ET ALORS (Les Niçois & JAJAJA)","269":"Happyvore","270":"Guyader","297":"Galliance","305":"Padouen","306":"La Grande Epicerie - frais","325":"La Grande Epicerie - Labo","329":"Kook's (K factory)","339":"Marie Severac","341":"Evootrade (Gourmet)","363":"Heura","364":"Mavrommatis","377":"Shaki shaki","413":"Hardouin","415":"Alterfood","451":"Fous de l'Ile","471":"Charal","525":"Planted","566":"PREVOGEL","581":"Novandie","621":"Sill","1666":"Montalet","1695":"Ronsard cacher (S2M VOLAILLES)","1718":"Nemrod","1719":"Tempé","1746":"AMALAB - PINSA DI MARCO","1754":"Beillevaire FRICHTI","1755":"Pastavino FRICHTI","1756":"Cochonaille d'Olivier FRICHTI","1757":"Golfera","1777":"Pastavino Prep Food","1778":"Pastavino Pasta","1854":"Maison Beya","2231":"Vivant","2234":"La Brasserie Parallèle","2285":"ET ALORS (Les Niçois & JAJAJA) FRAIS","2317":"Les délices du chef","2319":"ATELIER Sö"}};
+function parseKpiValue(tdContent){const match=tdContent.match(/<strong>([^<]+)<\/strong>|>([^<]+)</);if(!match)return null;const val=(match[1]||match[2]||'').trim();if(val.includes('€'))return parseFloat(val.replace(/[€\s]/g,'').replace(',','.'))||0;if(val.includes('%'))return parseFloat(val.replace('%','').replace(',','.'))||0;if(val.includes('m')&&val.includes('s')){const m=val.match(/(\d+)m/);const s=val.match(/(\d+)s/);return(m?parseInt(m[1])*60:0)+(s?parseInt(s[1]):0);}return val;}
+function parseCheckoutStat(html){const match=html.match(/<tr[^>]*id="cs_ca_ttc"[^>]*>([\s\S]*?)<\/tr>/i);if(!match)return{};const tds=match[1].match(/<td[^>]*class="[^"]*table-info[^"]*"[^>]*>([\s\S]*?)<\/td>/);if(!tds)return{};return{ca_ttc:parseKpiValue(tds[1])};}
+function parseStockStat(html){const match=html.match(/<strong>Montant Sorti DLC<\/strong>[\s\S]*?<tr[^>]*>([\s\S]*?)<\/tr>/i);if(!match)return{};const tds=match[1].match(/<td[^>]*class="[^"]*table-info[^"]*"[^>]*>([\s\S]*?)<\/td>/);if(!tds)return{};return{montant_dlc:parseKpiValue(tds[1])};}
+function parsePackingStat(html){const match=html.match(/<strong>Coûts Zone Frais<\/strong>[\s\S]*?<tr[^>]*>([\s\S]*?)<\/tr>/i);if(!match)return{};const tds=match[1].match(/<td[^>]*class="[^"]*table-info[^"]*"[^>]*>([\s\S]*?)<\/td>/);if(!tds)return{};return{couts_zone_frais:parseKpiValue(tds[1])};}
+function parseWarehouseZone(html){const kpis={};const kpiNames=['CA HT Frais','% CA HT Frais','Item Prép. Frais','Tps picking moyen Frais','Vrai Manquants Frais'];kpiNames.forEach(kpiName=>{const escaped=kpiName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');const regex=new RegExp(`<strong>${escaped}<\\/strong>[\\s\\S]*?<tr[^>]*>([\\s\\S]*?)<\\/tr>`,'i');const match=html.match(regex);if(match){const tds=match[1].match(/<td[^>]*class="[^"]*table-info[^"]*"[^>]*>([\s\S]*?)<\/td>/);if(tds){const key=kpiName.toLowerCase().replace(/[%\s]+/g,'_').replace(/_+/g,'_').replace(/^_|_$/g,'');kpis[key]=parseKpiValue(tds[1]);}}});return kpis;}
+function parseSupplier(html){const suppliers={};KPI_CONFIG.freshSupplierIds.forEach(supplierId=>{const supplierName=KPI_CONFIG.supplierNames[supplierId];if(!supplierName)return;const caRegex=new RegExp(`<strong>CA HT ${supplierName.replace(/[.*+?^${}()|[\]\\]/g,'\\\\$&')}<\\/strong>[\\s\\S]*?<tr[^>]*>([\\s\\S]*?)<\\/tr>`,'i');const caMatch=html.match(caRegex);const margeRegex=new RegExp(`<strong>Taux de marge ${supplierName.replace(/[.*+?^${}()|[\]\\]/g,'\\\\$&')}<\\/strong>[\\s\\S]*?<tr[^>]*>([\\s\\S]*?)<\\/tr>`,'i');const margeMatch=html.match(margeRegex);const key=`sup_${supplierId}`;suppliers[key]={name:supplierName,ca_ht:0,marge:0};if(caMatch){const tds=caMatch[1].match(/<td[^>]*class="[^"]*table-info[^"]*"[^>]*>([\s\S]*?)<\/td>/);if(tds)suppliers[key].ca_ht=parseKpiValue(tds[1])||0;}if(margeMatch){const tds=margeMatch[1].match(/<td[^>]*class="[^"]*table-info[^"]*"[^>]*>([\s\S]*?)<\/td>/);if(tds)suppliers[key].marge=parseKpiValue(tds[1])||0;}});return suppliers;}
+async function kpiLoadAndGo(){const status=document.getElementById('kpiFetchStatus');status.style.display='block';status.textContent='⏳ Chargement des KPIs...';status.style.color='var(--blue)';try{const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);const dateStr=yesterday.toISOString().split('T')[0];const url=`${KPI_CONFIG.proxyUrl}?action=fetch_kpis&date_min=${dateStr}&date_max=${dateStr}&agregation=day`;const response=await fetch(url);if(!response.ok)throw new Error(`HTTP ${response.status}`);const rawData=await response.json();if(rawData.error)throw new Error(rawData.error);const kpis={date:dateStr,...parseCheckoutStat(rawData.data.checkoutstat?.html||''),...parseStockStat(rawData.data.stockstat?.html||''),...parsePackingStat(rawData.data.packingstat?.html||''),...parseWarehouseZone(rawData.data.warehousezone?.html||''),suppliers:parseSupplier(rawData.data.supplier?.html||'')};await saveKpisToGoogleSheets(dateStr,kpis);await refreshKpiTable();status.textContent=`✅ KPIs du ${dateStr} chargés !`;status.style.color='var(--ok)';setTimeout(()=>{document.getElementById('drop').style.display='none';document.getElementById('dash').style.display='block';switchTab('k');},800);}catch(err){status.textContent=`❌ Erreur: ${err.message}`;status.style.color='var(--rupture)';}}
+async function loadKpiJMinus1(){showKpiMessage('info','Chargement des KPIs J-1...');try{const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);const dateStr=yesterday.toISOString().split('T')[0];const url=`${KPI_CONFIG.proxyUrl}?action=fetch_kpis&date_min=${dateStr}&date_max=${dateStr}&agregation=day`;const response=await fetch(url);if(!response.ok)throw new Error(`HTTP ${response.status}`);const rawData=await response.json();if(rawData.error)throw new Error(rawData.error);const kpis={date:dateStr,...parseCheckoutStat(rawData.data.checkoutstat?.html||''),...parseStockStat(rawData.data.stockstat?.html||''),...parsePackingStat(rawData.data.packingstat?.html||''),...parseWarehouseZone(rawData.data.warehousezone?.html||''),suppliers:parseSupplier(rawData.data.supplier?.html||'')};await saveKpisToGoogleSheets(dateStr,kpis);await refreshKpiTable();showKpiMessage('success',`KPIs du ${dateStr} chargés !`);}catch(err){showKpiMessage('error',`Erreur: ${err.message}`);}}
+async function saveKpisToGoogleSheets(date,kpis){const response=await fetch(KPI_CONFIG.googleSheetsUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({date:date,kpis:kpis})});if(!response.ok)throw new Error(`HTTP ${response.status}`);return await response.json();}
+async function loadKpisFromGoogleSheets(){const response=await fetch(KPI_CONFIG.googleSheetsUrl);if(!response.ok)throw new Error(`HTTP ${response.status}`);const result=await response.json();return result.rows||[];}
+async function refreshKpiTable(){showKpiMessage('info','Chargement...');try{const rows=await loadKpisFromGoogleSheets();DK=rows.length>0;document.getElementById('kNoData').style.display=DK?'none':'flex';document.getElementById('kDash').style.display=DK?'block':'none';if(DK)renderKpiTable(rows);document.getElementById('kpiMessage').style.display='none';}catch(err){showKpiMessage('error',`Erreur: ${err.message}`);}}
+function renderKpiTable(rows){const tbody=document.getElementById('kpiTableBody');if(!tbody)return;if(!rows||rows.length===0){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text3)">Aucune donnée</td></tr>';return;}tbody.innerHTML=rows.slice(0,30).map(row=>{const date=row.date||'-';const caTtc=formatEuro(row.ca_ttc||0);const montantDlc=formatEuro(row.montant_dlc||0);const coutsZoneFrais=formatEuro(row.couts_zone_frais||0);const caHtFrais=formatEuro(row.ca_ht_frais||0);const pctCaFrais=formatPercent(row._ca_ht_frais||0);return`<tr><td class="num" style="font-weight:500">${date}</td><td class="num kv-ca">${caTtc}</td><td class="num kv-warn">${montantDlc}</td><td class="num">${coutsZoneFrais}</td><td class="num kv-ok">${caHtFrais}</td><td class="num">${pctCaFrais}</td><td class="num">${row.item_prep_frais||'-'}</td><td class="num">${row.tps_picking_moyen_frais||'-'}s</td><td class="num">${row.vrai_manquants_frais||'-'}</td></tr>`;}).join('');document.getElementById('kpiPeriod').textContent=`${rows.length} jours`;}
+function showKpiMessage(type,message){const msgDiv=document.getElementById('kpiMessage');if(!msgDiv)return;const colors={success:'var(--ok)',error:'var(--rupture)',info:'var(--blue)'};msgDiv.style.background=`color-mix(in srgb,${colors[type]} 10%,transparent)`;msgDiv.style.border=`1px solid color-mix(in srgb,${colors[type]} 25%,transparent)`;msgDiv.style.color=colors[type];msgDiv.textContent=message;msgDiv.style.display='block';if(type!=='info')setTimeout(()=>msgDiv.style.display='none',5000);}
+function formatEuro(val){if(typeof val!=='number')return'-';return val.toLocaleString('fr-FR',{style:'currency',currency:'EUR'});}
+function formatPercent(val){if(typeof val!=='number')return'-';return val.toFixed(2)+'%';}
+
 </script>
 </body>
 </html>
