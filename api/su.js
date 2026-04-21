@@ -222,17 +222,24 @@ module.exports = async function handler(req, res) {
           if (dashHtml.includes('FormSignin') || dashHtml.includes('action="/account/login"')) {
             return { type: 'dashboard', error: 'Session expirée', html: '' };
           }
-          // Extract CA TTC value server-side to avoid sending huge HTML
-          // Pattern: <tr ... id="ca_ttc"> ... <td class="ca_ttc ... table-info"> ... <strong>VALUE</strong> ... </td>
-          var caMatch = dashHtml.match(/<tr[^>]*id="ca_ttc"[^>]*>[\s\S]*?<td[^>]*class="[^"]*table-info[^"]*"[^>]*>([\s\S]*?)<\/td>/i);
+          // Extract CA TTC: <tr ... id="ca_ttc"> ... <td class="ca_ttc ... table-info">...<strong>VALUE</strong>...</td>
+          // But there can be multiple <td> in the row — we need the one with "table-info"
+          var trMatch = dashHtml.match(/<tr[^>]*id="ca_ttc"[^>]*>([\s\S]*?)<\/tr>/i);
           var caVal = '0';
-          if (caMatch) {
-            var strongMatch = caMatch[1].match(/<strong>([^<]+)<\/strong>/);
-            caVal = strongMatch ? strongMatch[1].trim() : caMatch[1].replace(/<[^>]+>/g, '').trim();
+          if (trMatch) {
+            var tdInfoMatch = trMatch[1].match(/<td[^>]*class="[^"]*table-info[^"]*"[^>]*>([\s\S]*?)<\/td>/i);
+            if (tdInfoMatch) {
+              var strongMatch = tdInfoMatch[1].match(/<strong>([^<]+)<\/strong>/);
+              if (strongMatch) {
+                caVal = strongMatch[1].trim();
+              } else {
+                // Fallback: extract text content
+                caVal = tdInfoMatch[1].replace(/<[^>]+>/g, '').trim();
+              }
+            }
           }
-          // Return minimal HTML just for the parser
           var miniHtml = '<tr id="ca_ttc"><td class="ca_ttc table-info"><strong>' + caVal + '</strong></td></tr>';
-          return { type: 'dashboard', html: miniHtml, error: null };
+          return { type: 'dashboard', html: miniHtml, error: null, debug_raw: caVal };
         } catch (err) {
           return { type: 'dashboard', error: err.message, html: '' };
         }
