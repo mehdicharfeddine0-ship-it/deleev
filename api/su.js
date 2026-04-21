@@ -283,26 +283,30 @@ module.exports = async function handler(req, res) {
       }
 
     } else if (action === 'probe_ruptures') {
-      // Debug: see the raw HTML structure of suppliers_v2
       try {
         var rupUrl = BASE + '/stats/stock_monitor/suppliers_v2?logistics_center_ids=9';
         var rupResp = await fetch(rupUrl, { headers: headers, redirect: 'follow' });
         var rupHtml = await rupResp.text();
         if (rupHtml.includes('FormSignin')) return res.status(200).json({ error: 'Session expirée' });
         
-        // Find first data row with a supplier ID
-        var firstRow = rupHtml.match(/<tr[^>]*>[\s\S]*?supplier\/(\d+)[\s\S]*?<\/tr>/i);
-        var sample = firstRow ? firstRow[0].substring(0, 1500) : 'No supplier row found';
+        // Find tbody
+        var tbodyMatch = rupHtml.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/i);
+        var tbody = tbodyMatch ? tbodyMatch[1] : '';
         
-        // Also get column headers
-        var theadMatch = rupHtml.match(/<thead[^>]*>([\s\S]*?)<\/thead>/i);
-        var headers_html = theadMatch ? theadMatch[1].substring(0, 1000) : 'No thead found';
+        // Get first 3 <tr> from tbody
+        var trs = [];
+        var trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+        var m;
+        var count = 0;
+        while ((m = trRe.exec(tbody)) !== null && count < 3) {
+          trs.push(m[0].substring(0, 1200));
+          count++;
+        }
         
         return res.status(200).json({ 
-          pageLength: rupHtml.length,
-          hasLogin: rupHtml.includes('FormSignin'),
-          sampleRow: sample,
-          headers: headers_html
+          tbodyLength: tbody.length,
+          rowCount: (tbody.match(/<tr/gi) || []).length,
+          firstRows: trs
         });
       } catch (err) {
         return res.status(200).json({ error: err.message });
