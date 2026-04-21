@@ -488,14 +488,15 @@ td{padding:9px 10px;vertical-align:middle;}
           <thead><tr>
             <th style="width:3%">✓</th>
             <th style="width:3%">#</th>
-            <th style="width:19%">Fournisseur</th>
-            <th style="width:9%">Heure(s)</th>
-            <th style="width:10%">Réception</th>
-            <th style="width:7%">Produits</th>
-            <th style="width:10%">Montant</th>
-            <th style="width:9%">Franco</th>
-            <th style="width:9%">Statut</th>
-            <th style="width:21%">Routines</th>
+            <th style="width:17%">Fournisseur</th>
+            <th style="width:7%">Rupt.</th>
+            <th style="width:8%">Heure(s)</th>
+            <th style="width:9%">Réception</th>
+            <th style="width:6%">Produits</th>
+            <th style="width:9%">Montant</th>
+            <th style="width:8%">Franco</th>
+            <th style="width:8%">Statut</th>
+            <th style="width:22%">Routines</th>
           </tr></thead>
           <tbody id="cTbody"></tbody>
         </table>
@@ -595,6 +596,7 @@ let gran='week',per='ALL',sV='ca_desc',qV='',expId=null,rupOnly=false;
 let sP='dvs_asc',qP='',fCats=new Set(),fTypo='',fColis='';
 let pPage=1,pPerPage=50,pExpandedGroup=null,fQiOnly=false;
 let cDay='lundi',cFilter='all';
+let cRuptureData={};
 let supplierName='',ruptFournisseurIds=new Set(),ruptFournOnly=false;
 
 // Dictionnaire id→nom fournisseur (hardcodé depuis l'export commandes du 14/04/2026)
@@ -1002,7 +1004,7 @@ function launch(){
   if(supplierName){
     const supId=supplierName;
     const resolvedName=getSupplierName(supId)||(!isNaN(+supId)?null:supId);
-    const supLink='https://products.app.deleev.com/supplier-orders?ordering=-pk&supplier_id='+supId+'&expected_delivery_date_gte&expected_delivery_date_lte';
+    const supLink='https://products.app.deleev.com/supplier-orders?ordering=-pk&supplier_id='+supId+'&expected_delivery_date_gte&expected_delivery_date_lte&logistics_center_id=9';
     const st=document.getElementById('supplierTag');
     if(resolvedName){
       st.innerHTML='· <a href="'+supLink+'" target="_blank" style="color:var(--promo);text-decoration:none;font-weight:600">🏢 '+resolvedName+'</a>';
@@ -1152,7 +1154,7 @@ function cRender(){
     <div class="cstat"><div class="cstat-lbl">Franco atteint</div><div class="cstat-val" style="color:var(--ok)">${francoC}</div></div>`;
 
   const tb=document.getElementById('cTbody');
-  if(!rows.length){tb.innerHTML=`<tr><td colspan="9" style="text-align:center;padding:60px;font-family:'Geist Mono',monospace;font-size:12px;color:var(--text3)">Aucune commande ce jour-là.</td></tr>`;return;}
+  if(!rows.length){tb.innerHTML=`<tr><td colspan="11" style="text-align:center;padding:60px;font-family:'Geist Mono',monospace;font-size:12px;color:var(--text3)">Aucune commande ce jour-là.</td></tr>`;return;}
 
   tb.innerHTML='';
   rows.forEach((f,i)=>{
@@ -1166,7 +1168,7 @@ function cRender(){
     // Montant → lien auto_products
     const montantFmt=isNaN(parseFloat(f.montant))?'—':parseFloat(f.montant).toLocaleString('fr-FR',{style:'currency',currency:'EUR',minimumFractionDigits:2});
     const montantLink=`https://admin.deleev.com/suppliers/auto_products/${f.id}?logistics_center_id=9`;
-    const supplierLink=`https://products.app.deleev.com/supplier-orders?ordering=-pk&supplier_id=${f.id}&expected_delivery_date_gte&expected_delivery_date_lte`;
+    const supplierLink=`https://products.app.deleev.com/supplier-orders?ordering=-pk&supplier_id=${f.id}&expected_delivery_date_gte&expected_delivery_date_lte&logistics_center_id=9`;
 
     // Routines avec highlight du jour actif
     const dayNorm=cDay.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -1203,6 +1205,7 @@ function cRender(){
         ${supNameFromDict&&f.fournisseur&&supNameFromDict!==f.fournisseur?`<div class="cfid" style="color:var(--text3)">${f.fournisseur}</div>`:''}
         <div class="cfid">#${f.id}</div>
       </td>
+      <td style="text-align:center">${(function(){const rp=cRuptureData[f.id];if(rp===undefined||rp===null)return'<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3)">—</span>';const col=rp<=10?'var(--ok)':rp<=30?'var(--warn)':'var(--rupture)';return'<span class="badge" style="background:color-mix(in srgb,'+col+' 12%,transparent);color:'+col+';font-family:Geist Mono,monospace;font-size:11px">'+rp.toFixed(1)+'%</span>';})()}</td>
       <td><span class="ctime">${times}</span></td>
       <td><span class="cnum" style="color:var(--text2);font-size:11px">${reception}</span></td>
       <td class="cnum" style="color:var(--text2)">${f.nbProduits||'0'}</td>
@@ -1973,7 +1976,21 @@ async function uFetchCommandes(){
     document.getElementById('fCname').textContent='✓ '+DC.length+' fournisseurs frais (via API)';
     document.getElementById('fCname').style.display='block';
     document.getElementById('dzC').style.borderColor='var(--units)';
-    status.textContent='✅ '+DC.length+' fournisseurs chargés';
+    
+    // Also fetch rupture data
+    status.textContent='⏳ Chargement des ruptures…';
+    try{
+      const rupResp=await fetch(U_PROXY+'?action=fetch_ruptures');
+      const rupData=await rupResp.json();
+      if(rupData.suppliers){
+        cRuptureData=rupData.suppliers;
+        status.textContent='✅ '+DC.length+' fournisseurs + '+Object.keys(cRuptureData).length+' ruptures';
+      }else{
+        status.textContent='✅ '+DC.length+' fournisseurs (ruptures: '+( rupData.error||'N/A')+')';
+      }
+    }catch(e){
+      status.textContent='✅ '+DC.length+' fournisseurs (ruptures: erreur)';
+    }
     status.style.color='var(--ok)';
     checkReady();
   }catch(err){
