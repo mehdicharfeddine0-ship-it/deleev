@@ -464,6 +464,23 @@ td{padding:9px 10px;vertical-align:middle;}
         <div class="csep"></div>
         <input class="csi" id="cSearch" placeholder="Rechercher…" oninput="cRender()">
       </div>
+
+      <!-- Calculateur de variation -->
+      <div style="padding:8px 24px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px">Calculateur</span>
+          <input id="calcBase" type="number" placeholder="Valeur" style="font-family:'Geist Mono',monospace;font-size:13px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:6px 10px;width:100px;outline:none" oninput="calcVariation()">
+          <div style="display:flex;gap:4px;align-items:center">
+            <button id="calcDown" onclick="setCalcDir('down')" style="font-family:'Geist Mono',monospace;font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--rupture);background:color-mix(in srgb,var(--rupture) 15%,transparent);color:var(--rupture);cursor:pointer;font-weight:600">▼</button>
+            <button id="calcUp" onclick="setCalcDir('up')" style="font-family:'Geist Mono',monospace;font-size:12px;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--text3);cursor:pointer;font-weight:600">▲</button>
+          </div>
+          <input id="calcPct" type="number" placeholder="%" style="font-family:'Geist Mono',monospace;font-size:13px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:6px 10px;width:70px;outline:none" oninput="calcVariation()">
+          <span style="font-family:'Geist Mono',monospace;font-size:13px;color:var(--text3)">%</span>
+          <span style="font-family:'Geist Mono',monospace;font-size:13px;color:var(--text3)">=</span>
+          <span id="calcResult" style="font-family:'Geist Mono',monospace;font-size:16px;font-weight:600;color:var(--ca);min-width:80px">—</span>
+          <span id="calcDelta" style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--text3)"></span>
+        </div>
+      </div>
       <div class="ctw">
         <table class="ctable">
           <thead><tr>
@@ -2510,6 +2527,29 @@ let _lastProdCSV=null;
     sel.appendChild(opt);
   });
 })();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CALCULATEUR DE VARIATION
+// ═══════════════════════════════════════════════════════════════════════════
+let calcDir='down';
+function setCalcDir(d){
+  calcDir=d;
+  const up=document.getElementById('calcUp'),dn=document.getElementById('calcDown');
+  if(d==='up'){up.style.borderColor='var(--ok)';up.style.background='color-mix(in srgb,var(--ok) 15%,transparent)';up.style.color='var(--ok)';dn.style.borderColor='var(--border)';dn.style.background='var(--surface2)';dn.style.color='var(--text3)';}
+  else{dn.style.borderColor='var(--rupture)';dn.style.background='color-mix(in srgb,var(--rupture) 15%,transparent)';dn.style.color='var(--rupture)';up.style.borderColor='var(--border)';up.style.background='var(--surface2)';up.style.color='var(--text3)';}
+  calcVariation();
+}
+function calcVariation(){
+  const base=parseFloat(document.getElementById('calcBase').value)||0;
+  const pct=parseFloat(document.getElementById('calcPct').value)||0;
+  const res=document.getElementById('calcResult'),delta=document.getElementById('calcDelta');
+  if(!base||!pct){res.textContent='—';res.style.color='var(--ca)';delta.textContent='';return;}
+  const diff=base*pct/100;
+  const result=calcDir==='up'?base+diff:base-diff;
+  res.textContent=result.toLocaleString('fr-FR',{maximumFractionDigits:2});
+  res.style.color=calcDir==='up'?'var(--ok)':'var(--rupture)';
+  delta.textContent=(calcDir==='up'?'+':'-')+diff.toLocaleString('fr-FR',{maximumFractionDigits:2});
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MODULE KPI FRAIS
