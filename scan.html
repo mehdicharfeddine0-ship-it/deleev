@@ -289,13 +289,15 @@ function onScanSuccess(code){
 
   // Clean the scanned code (remove spaces, parentheses, AI prefix)
   let sscc=code.replace(/[\s\(\)]/g,'');
-  // Remove GS1 AI prefix "00" if present at start
-  if(sscc.startsWith('00')&&sscc.length>18)sscc=sscc.substring(2);
-  // Remove check digit if 18 chars
-  if(sscc.length===18)sscc=sscc.substring(0,17);
+  // Remove GS1 AI prefix "00" if present at start (scanned SSCC = 00 + 18 digit SSCC)
+  if(sscc.startsWith('00')&&sscc.length===20)sscc=sscc.substring(2);
 
-  // Find matching palette
-  let pal=palettes.find(p=>p.id===sscc||p.id===code||p.id.endsWith(sscc.slice(-10)));
+  // Find matching palette - try multiple strategies
+  let pal=palettes.find(p=>p.id===sscc);
+  // Try with original code
+  if(!pal)pal=palettes.find(p=>p.id===code.replace(/[\s\(\)]/g,''));
+  // Try matching last 12 digits (in case of prefix differences)
+  if(!pal)pal=palettes.find(p=>p.id.slice(-12)===sscc.slice(-12));
   // Try matching last 6 digits
   if(!pal)pal=palettes.find(p=>p.short===sscc.slice(-6));
 
