@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Scanner Palettes</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+:root{--bg:#0c0f14;--surface:#161a22;--surface2:#1c2029;--border:#262a35;--text:#e8eaed;--text2:#8b8f9a;--text3:#555a66;--ok:#2dd4a0;--warn:#f5a524;--rupture:#f44;--units:#60a5fa;--fs:#f5a524}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;min-height:100dvh;overflow-x:hidden}
+.header{padding:16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.header h1{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--ok)}
+.header .sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3)}
+.setup{padding:16px;display:flex;flex-direction:column;gap:12px}
+.setup-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px}
+.setup-card h2{font-size:13px;font-weight:600;margin-bottom:10px}
+.btn{font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:12px 20px;border:none;border-radius:10px;cursor:pointer;width:100%;transition:all .15s}
+.btn-primary{background:var(--ok);color:#000}
+.btn-primary:active{transform:scale(.97)}
+.btn-primary:disabled{opacity:.4}
+.btn-scan{background:var(--units);color:#000;font-size:16px;padding:16px}
+.btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--text)}
+.status{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text2);margin-top:6px;min-height:14px}
+.status.err{color:var(--rupture)}
+.status.ok{color:var(--ok)}
+.bl-info{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.bl-chip{font-family:'JetBrains Mono',monospace;font-size:11px;background:var(--surface2);padding:4px 10px;border-radius:6px;border:1px solid var(--border)}
+.bl-chip strong{color:var(--ok)}
+
+/* Scanner view */
+.scanner-view{display:none;flex-direction:column;height:100vh;height:100dvh}
+.scanner-top{padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.scanner-top .back{font-size:13px;color:var(--text2);background:none;border:none;cursor:pointer;font-family:'DM Sans',sans-serif}
+.scanner-cam{flex:1;background:#000;position:relative;overflow:hidden}
+#reader{width:100%;height:100%}
+#reader video{object-fit:cover !important}
+.scan-overlay{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.scan-frame{width:280px;height:120px;border:2px solid var(--ok);border-radius:8px;box-shadow:0 0 0 2000px rgba(0,0,0,.5)}
+
+/* Result card */
+.result{display:none;padding:16px;overflow-y:auto;flex:1}
+.result-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.result-priority{padding:20px;text-align:center}
+.result-priority .rank{font-family:'JetBrains Mono',monospace;font-size:48px;font-weight:700;line-height:1}
+.result-priority .of{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--text3)}
+.result-priority .label{font-size:12px;color:var(--text2);margin-top:4px}
+.result-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border)}
+.result-stats>div{background:var(--surface);padding:12px 8px;text-align:center}
+.result-stats .val{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700}
+.result-stats .lbl{font-size:9px;color:var(--text3);margin-top:2px;text-transform:uppercase}
+.result-rup{padding:12px 16px}
+.result-rup h3{font-size:11px;color:var(--rupture);margin-bottom:6px}
+.result-rup .item{font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+.result-rup .item:last-child{border:none}
+.result-actions{padding:16px;display:flex;gap:8px}
+.fs-banner{background:color-mix(in srgb,var(--warn) 10%,transparent);border:1px solid color-mix(in srgb,var(--warn) 25%,transparent);padding:8px 12px;font-size:11px;color:var(--warn);text-align:center}
+.tag-fs{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent);padding:1px 5px;border-radius:3px;margin-left:4px}
+.scanned-list{padding:0 16px 16px}
+.scanned-list h3{font-size:12px;color:var(--text2);margin:12px 0 6px}
+.scanned-item{font-family:'JetBrains Mono',monospace;font-size:11px;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+.scanned-item .rank-badge{font-weight:700;min-width:28px;text-align:center;padding:2px 6px;border-radius:4px}
+</style>
+</head>
+<body>
+
+<!-- SETUP VIEW -->
+<div id="setupView">
+  <div class="header">
+    <div>
+      <h1>📦 Scanner Palettes</h1>
+      <div class="sub">Dashboard Frais</div>
+    </div>
+  </div>
+  <div class="setup">
+    <div class="setup-card">
+      <h2>1. Charger le BL</h2>
+      <button class="btn btn-primary" onclick="loadBL()">🔄 Charger le dernier BL frais</button>
+      <div class="status" id="blStatus"></div>
+      <div class="bl-info" id="blInfo" style="display:none"></div>
+    </div>
+    <div class="setup-card">
+      <h2>2. Charger les produits</h2>
+      <button class="btn btn-primary" onclick="loadProducts()" id="btnProd" disabled>📦 Charger produits Système U frais</button>
+      <div class="status" id="prodStatus"></div>
+    </div>
+    <div class="setup-card" id="readyCard" style="display:none">
+      <h2>✅ Prêt à scanner</h2>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px" id="readySummary"></div>
+      <button class="btn btn-scan" onclick="startScanner()">📷 Lancer le scanner</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCANNER VIEW -->
+<div id="scannerView" class="scanner-view">
+  <div class="scanner-top">
+    <button class="back" onclick="stopScanner()">← Retour</button>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2)" id="scanCount">0 scanné(s)</span>
+  </div>
+  <div class="scanner-cam">
+    <div id="reader"></div>
+  </div>
+  <div class="result" id="resultPanel">
+    <div class="result-card" id="resultCard"></div>
+    <div class="result-actions">
+      <button class="btn btn-scan" onclick="resumeScan()" style="flex:1">📷 Scanner suivant</button>
+    </div>
+    <div class="scanned-list" id="scannedList"></div>
+  </div>
+</div>
+
+<script>
+const PROXY='/api/su';
+let blData=null,palettes=[],palPriority=[],productsMap={},scannedHistory=[];
+
+// ── LOAD BL ──
+async function loadBL(){
+  const st=document.getElementById('blStatus');
+  st.textContent='Chargement de la liste…';st.className='status';
+  try{
+    const resp=await fetch(PROXY+'?action=list');
+    const data=await resp.json();
+    if(data.error){st.textContent='❌ '+data.error;st.className='status err';return;}
+    // Find first BL starting with 0216
+    const frais=data.rows.filter(r=>r.bl&&r.bl.startsWith('0216'));
+    if(!frais.length){st.textContent='❌ Aucun BL frais (0216*)';st.className='status err';return;}
+    const bl=frais[0];
+    st.textContent='Chargement BL '+bl.bl+'…';
+    const resp2=await fetch(PROXY+'?action=bl&pk='+bl.pk);
+    const json=await resp2.json();
+    if(json.error){st.textContent='❌ '+json.error;st.className='status err';return;}
+    blData=json;
+    parsePalettes();
+    st.textContent='✅ BL '+bl.bl+' — '+(json.lignesLivraison||[]).length+' réfs · '+palettes.length+' pal.';
+    st.className='status ok';
+    const info=document.getElementById('blInfo');info.style.display='flex';
+    const cmds=[...new Set((json.lignesLivraison||[]).map(l=>l.numCommandeEmetteur).filter(Boolean))];
+    info.innerHTML=`<div class="bl-chip"><strong>${bl.bl}</strong></div><div class="bl-chip">${palettes.length} pal.</div><div class="bl-chip">${palettes.reduce((s,p)=>s+p.colis,0)} colis</div>${cmds.length?'<div class="bl-chip">Cde: '+cmds.join(', ')+'</div>':''}`;
+    document.getElementById('btnProd').disabled=false;
+  }catch(e){st.textContent='❌ '+e.message;st.className='status err';}
+}
+
+function parsePalettes(){
+  if(!blData)return;
+  const supports=blData.supportsDeLivraison||[];
+  const lignes=blData.lignesLivraison||[];
+  const palMap={};
+  supports.forEach(s=>{palMap[s.idSupport]={id:s.idSupport,short:s.idSupport.slice(-6),colis:s.nbColisSurSupport,items:[],ruptures:0,matchedCount:0,fsColis:0};});
+  lignes.forEach(l=>{
+    (l.supports||[]).forEach(s=>{
+      if(palMap[s.idSupport]){
+        palMap[s.idSupport].items.push({
+          name:l.libelleUniteLivraison,gtin:l.gtin,ean14:l.ean14,
+          qty:s.nbArticlesSurSupport||l.quantiteEnUniteDeLivraison?.livree||0,
+          bio:(l.commentaire||'').includes('BIO')
+        });
+      }
+    });
+  });
+  palettes=Object.values(palMap);
+}
+
+// ── LOAD PRODUCTS ──
+async function loadProducts(){
+  const st=document.getElementById('prodStatus');
+  st.textContent='Chargement page 1…';st.className='status';
+  try{
+    let all=[],page=1,found=0;
+    while(page<=40){
+      st.textContent='Page '+page+'… ('+all.length+' produits)';
+      const resp=await fetch(PROXY+'?action=products&page='+page+'&supplier=192');
+      const data=await resp.json();
+      if(data.error&&!all.length){st.textContent='❌ '+data.error;st.className='status err';return;}
+      found=data.found||found;
+      if(!data.products?.length)break;
+      all=all.concat(data.products);
+      if(data.products.length<250||all.length>=found)break;
+      page++;
+    }
+    // Build barcode→product map
+    productsMap={};
+    all.forEach(p=>{
+      if(p.barcode)productsMap[p.barcode]={stock:p.stock??0,name:p.name||'',zone:p.zone||0};
+    });
+    st.textContent='✅ '+all.length+' produits chargés';
+    st.className='status ok';
+    // Match palettes
+    matchPalettes();
+    computePriority();
+    document.getElementById('readyCard').style.display='block';
+    document.getElementById('readySummary').textContent=palettes.length+' palettes · '+palPriority.length+' en priorité · '+Object.keys(productsMap).length+' produits matchables';
+  }catch(e){st.textContent='❌ '+e.message;st.className='status err';}
+}
+
+function matchPalettes(){
+  palettes.forEach(pal=>{
+    let matched=0,rupt=0,fsColis=0;
+    pal.items.forEach(item=>{
+      const tries=[item.gtin,item.gtin?.slice(1),'0'+item.gtin,item.ean14,item.ean14?.slice(1)].filter(Boolean);
+      let found=null;
+      for(const t of tries){if(productsMap[t]){found=productsMap[t];break;}}
+      item.matched=!!found;
+      item.stock=found?found.stock:null;
+      item.rupture=found?found.stock<=0:false;
+      item.zone=found?found.zone:0;
+      item.isFraisSec=found?(found.zone>0&&found.zone<1000):false;
+      if(found)matched++;
+      if(item.rupture)rupt++;
+      if(item.isFraisSec)fsColis+=item.qty;
+    });
+    pal.matchedCount=matched;
+    pal.ruptures=rupt;
+    pal.fsColis=fsColis;
+    pal.fraisColis=pal.colis-fsColis;
+    pal.allFS=fsColis>0&&pal.fraisColis<=0;
+    pal.ruptureRate=matched>0?rupt/matched:0;
+  });
+}
+
+function computePriority(){
+  // Priority: most ruptures first, then most colis, exclude all-FS palettes
+  palPriority=[...palettes].sort((a,b)=>{
+    // All-FS palettes go last
+    if(a.allFS&&!b.allFS)return 1;
+    if(!a.allFS&&b.allFS)return -1;
+    // Then by rupture count desc
+    if(b.ruptures!==a.ruptures)return b.ruptures-a.ruptures;
+    // Then by colis desc
+    return b.fraisColis-a.fraisColis;
+  });
+  palPriority.forEach((p,i)=>p.priority=i+1);
+  // Also set priority on original palettes array
+  palettes.forEach(p=>{const pp=palPriority.find(x=>x.id===p.id);if(pp)p.priority=pp.priority;});
+}
+
+// ── SCANNER ──
+let scanner=null,scanning=false;
+
+function startScanner(){
+  document.getElementById('setupView').style.display='none';
+  const sv=document.getElementById('scannerView');sv.style.display='flex';
+  document.getElementById('resultPanel').style.display='none';
+  document.getElementById('scannerView').querySelector('.scanner-cam').style.display='block';
+  initCamera();
+}
+
+function stopScanner(){
+  if(scanner){try{scanner.stop();}catch(e){}}
+  scanner=null;scanning=false;
+  document.getElementById('scannerView').style.display='none';
+  document.getElementById('setupView').style.display='block';
+}
+
+function initCamera(){
+  if(scanner){try{scanner.stop();}catch(e){}}
+  scanning=true;
+  scanner=new Html5Qrcode("reader");
+  scanner.start(
+    {facingMode:"environment"},
+    {fps:10,qrbox:{width:280,height:120},aspectRatio:1.5,formatsToSupport:[
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.ITF,
+      Html5QrcodeSupportedFormats.CODABAR
+    ]},
+    onScanSuccess,
+    ()=>{}
+  ).catch(err=>{
+    console.error('Camera error',err);
+    // Fallback: manual input
+    document.getElementById('reader').innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;padding:20px">
+      <div style="color:var(--warn);font-size:12px">Caméra non disponible</div>
+      <input id="manualInput" type="text" placeholder="Entrez le SSCC manuellement" style="font-family:'JetBrains Mono',monospace;font-size:14px;padding:12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);width:100%;text-align:center">
+      <button class="btn btn-primary" onclick="onScanSuccess(document.getElementById('manualInput').value)" style="width:auto;padding:10px 24px">Valider</button>
+    </div>`;
+  });
+}
+
+function onScanSuccess(code){
+  if(!scanning)return;
+  scanning=false;
+  if(scanner){try{scanner.pause(true);}catch(e){}}
+
+  // Vibrate for feedback
+  if(navigator.vibrate)navigator.vibrate(100);
+
+  // Clean the scanned code (remove spaces, parentheses, AI prefix)
+  let sscc=code.replace(/[\s\(\)]/g,'');
+  // Remove GS1 AI prefix "00" if present at start
+  if(sscc.startsWith('00')&&sscc.length>18)sscc=sscc.substring(2);
+  // Remove check digit if 18 chars
+  if(sscc.length===18)sscc=sscc.substring(0,17);
+
+  // Find matching palette
+  let pal=palettes.find(p=>p.id===sscc||p.id===code||p.id.endsWith(sscc.slice(-10)));
+  // Try matching last 6 digits
+  if(!pal)pal=palettes.find(p=>p.short===sscc.slice(-6));
+
+  showResult(pal,code);
+}
+
+function showResult(pal,rawCode){
+  document.getElementById('scannerView').querySelector('.scanner-cam').style.display='none';
+  const rp=document.getElementById('resultPanel');rp.style.display='block';
+  const rc=document.getElementById('resultCard');
+
+  if(!pal){
+    rc.innerHTML=`<div class="result-priority" style="background:var(--surface2)">
+      <div class="rank" style="color:var(--rupture)">?</div>
+      <div class="label" style="color:var(--rupture)">Palette non trouvée</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text3);margin-top:8px">Code: ${rawCode}</div>
+    </div>`;
+    return;
+  }
+
+  // Add to history
+  if(!scannedHistory.find(h=>h.id===pal.id)){
+    scannedHistory.push({id:pal.id,short:pal.short,priority:pal.priority,colis:pal.colis,ruptures:pal.ruptures,allFS:pal.allFS,fsColis:pal.fsColis});
+  }
+  document.getElementById('scanCount').textContent=scannedHistory.length+' scanné(s)';
+
+  const prioColor=pal.priority<=3?'var(--rupture)':pal.priority<=7?'var(--warn)':'var(--ok)';
+
+  let html=`<div class="result-priority" style="background:linear-gradient(135deg,var(--surface2),var(--surface))">
+    <div class="rank" style="color:${prioColor}">${pal.priority}<span class="of">/${palettes.length}</span></div>
+    <div class="label">${pal.allFS?'🥚 Palette frais/sec':'Priorité de mise en stock'}</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);margin-top:6px">#${pal.short}</div>
+  </div>`;
+
+  if(pal.allFS){
+    html+=`<div class="fs-banner">🥚 Palette entièrement frais/sec — exclue de la mise en stock</div>`;
+  }else if(pal.fsColis>0){
+    html+=`<div class="fs-banner">${pal.colis} colis dont <strong>${pal.fsColis} frais/sec</strong> → ${pal.fraisColis} colis frais à stocker</div>`;
+  }
+
+  html+=`<div class="result-stats">
+    <div><div class="val">${pal.colis}</div><div class="lbl">Colis</div></div>
+    <div><div class="val">${pal.items.length}</div><div class="lbl">Réfs</div></div>
+    <div><div class="val" style="color:${pal.ruptures>0?'var(--rupture)':'var(--ok)'}">${pal.ruptures}</div><div class="lbl">Ruptures</div></div>
+  </div>`;
+
+  // Show rupture products
+  const rupItems=pal.items.filter(i=>i.rupture);
+  if(rupItems.length){
+    html+=`<div class="result-rup"><h3>🔴 Produits en rupture</h3>`;
+    rupItems.forEach(item=>{
+      html+=`<div class="item"><span style="max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.name}</span><span style="color:var(--rupture)">${item.qty} colis</span></div>`;
+    });
+    html+=`</div>`;
+  }
+
+  rc.innerHTML=html;
+
+  // Update scanned list
+  updateScannedList();
+}
+
+function updateScannedList(){
+  const sl=document.getElementById('scannedList');
+  if(!scannedHistory.length){sl.innerHTML='';return;}
+  let h='<h3>Palettes scannées</h3>';
+  scannedHistory.sort((a,b)=>a.priority-b.priority).forEach(s=>{
+    const prioColor=s.priority<=3?'var(--rupture)':s.priority<=7?'var(--warn)':'var(--ok)';
+    h+=`<div class="scanned-item">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="rank-badge" style="color:${prioColor};background:color-mix(in srgb,${prioColor} 12%,transparent)">${s.priority}</span>
+        <span>#${s.short}</span>
+        ${s.allFS?'<span class="tag-fs">FS</span>':''}
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <span>${s.colis} col.</span>
+        ${s.ruptures>0?`<span style="color:var(--rupture)">${s.ruptures} rupt.</span>`:'<span style="color:var(--ok)">✓</span>'}
+      </div>
+    </div>`;
+  });
+  sl.innerHTML=h;
+}
+
+function resumeScan(){
+  document.getElementById('resultPanel').style.display='none';
+  document.getElementById('scannerView').querySelector('.scanner-cam').style.display='block';
+  scanning=true;
+  if(scanner){try{scanner.resume();}catch(e){initCamera();}}
+  else initCamera();
+}
+</script>
+</body>
+</html>
