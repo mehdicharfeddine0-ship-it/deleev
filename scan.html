@@ -259,7 +259,7 @@ function initCamera(){
   scanner=new Html5Qrcode("reader");
   scanner.start(
     {facingMode:"environment"},
-    {fps:20,qrbox:function(vw,vh){return{width:Math.floor(vw*0.9),height:Math.floor(vh*0.35)};},formatsToSupport:[
+    {fps:20,formatsToSupport:[
       Html5QrcodeSupportedFormats.CODE_128,
       Html5QrcodeSupportedFormats.ITF
     ],disableFlip:true,experimentalFeatures:{useBarCodeDetectorIfSupported:true}},
