@@ -2680,8 +2680,20 @@ function renderKpiView(){
   const tbody=document.getElementById('kpiTableBody');
   if(!rows.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text3)">Aucune donnée</td></tr>';return;}
 
+  // Build lookup for same-weekday comparison (day view: compare to 7 days ago)
+  const dateMap={};kpiRawRows.forEach(r=>{dateMap[r.date]=r;});
+  function getPrev(r,i){
+    if(kpiFilter==='day'){
+      // Compare to same weekday last week
+      const d=new Date(r.date);d.setDate(d.getDate()-7);const prevDate=d.toISOString().split('T')[0];
+      return dateMap[prevDate]||null;
+    }
+    // For week/month view, compare to previous period (next item in sorted desc array)
+    return rows[i+1]||null;
+  }
+
   tbody.innerHTML=rows.map((r,i)=>{
-    const prev=rows[i+1]||null;
+    const prev=getPrev(r,i);
     return '<tr>'+
       '<td class="num" style="font-weight:500">'+formatKpiDate(r.date,kpiFilter)+'</td>'+
       '<td class="num kv-ca">'+fE(r.ca_ttc)+deltaBadge(r.ca_ttc,prev?.ca_ttc)+'</td>'+
@@ -2721,10 +2733,13 @@ function renderSupplierView(supId){
   const thead=document.getElementById('kpiTableHead');
   thead.innerHTML='<tr><th class="ns">Date</th><th>CA HT</th><th>Δ</th><th>Marge %</th><th>Δ</th></tr>';
   const tbody=document.getElementById('kpiTableBody');
+  const supDateMap={};kpiRawRows.forEach(r=>{supDateMap[r.date]=r;});
   tbody.innerHTML=rows.map((r,i)=>{
     const ca=r._sup?.[caKey]||r[caKey]||0;
     const marge=r._sup?.[margeKey]||r[margeKey]||0;
-    const prev=rows[i+1]||null;
+    let prev=null;
+    if(kpiFilter==='day'){const d=new Date(r.date);d.setDate(d.getDate()-7);prev=supDateMap[d.toISOString().split('T')[0]]||null;}
+    else{prev=rows[i+1]||null;}
     const prevCa=prev?._sup?.[caKey]||prev?.[caKey]||0;
     const prevMarge=prev?._sup?.[margeKey]||prev?.[margeKey]||0;
     return '<tr>'+
