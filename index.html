@@ -2612,10 +2612,32 @@ async function fetchKpiForDate(dateStr) {
 }
 
 async function saveKpisToGoogleSheets(date, kpis) {
+  // Build flat payload: base KPIs + supplier data
+  const payload = {
+    date: date,
+    ca_ttc: kpis.ca_ttc || 0,
+    montant_dlc: kpis.montant_dlc || 0,
+    couts_zone_frais: kpis.couts_zone_frais || 0,
+    ca_ht_frais: kpis.ca_ht_frais || 0,
+    pct_ca_ht_frais: kpis.pct_ca_ht_frais || 0,
+    item_prep_frais: kpis.item_prep_frais || 0,
+    tps_picking_moyen_frais: kpis.tps_picking_moyen_frais || 0,
+    vrai_manquants_frais: kpis.vrai_manquants_frais || 0
+  };
+  // Add supplier data
+  if (kpis.suppliers) {
+    const supData = {};
+    Object.keys(kpis.suppliers).forEach(key => {
+      const s = kpis.suppliers[key];
+      supData[key + '_ca'] = s.ca_ht || 0;
+      supData[key + '_marge'] = s.marge || 0;
+    });
+    payload.suppliers = supData;
+  }
   const resp = await fetch(KPI_CONFIG.proxyUrl + '?action=save_kpis', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ date, kpis })
+    body: JSON.stringify(payload)
   });
   if (!resp.ok) throw new Error('HTTP ' + resp.status);
   return await resp.json();
@@ -2626,7 +2648,12 @@ async function loadKpisFromGoogleSheets() {
   if (!resp.ok) throw new Error('HTTP ' + resp.status);
   const result = await resp.json();
   if (result.error) throw new Error(result.error);
-  return result.rows || [];
+  // Ensure ca_ttc is a number, not a date string
+  const rows = (result.rows || []).map(r => {
+    if (typeof r.ca_ttc === 'string') r.ca_ttc = parseFloat(r.ca_ttc.replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
+    return r;
+  });
+  return rows;
 }
 
 // ── Load actions ──
@@ -2638,6 +2665,8 @@ async function loadKpiJMinus1() {
     const dateStr = d.toISOString().split('T')[0];
     const kpis = await fetchKpiForDate(dateStr);
     await saveKpisToGoogleSheets(dateStr, kpis);
+    // Trim to 60 days
+    try { await fetch(KPI_CONFIG.proxyUrl + '?action=trim_kpis&keep=60'); } catch(e) {}
     await refreshKpiTable();
     showKpiMessage('success', '✅ KPIs du ' + dateStr + ' chargés !');
   } catch (err) {
