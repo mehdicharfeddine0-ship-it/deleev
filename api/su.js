@@ -347,7 +347,9 @@ module.exports = async function handler(req, res) {
           // TD[5] = % rupture réelle (e.g. "35,94 %")
           if (tds.length >= 6) {
             var pctStr = tds[5].replace('%', '').replace(/\s/g, '').replace(',', '.');
-            suppliers[supId] = parseFloat(pctStr) || 0;
+            var nbStock = parseInt(tds[1].replace(/\s/g, '')) || 0;
+            var nbQi = parseInt(tds[2].replace(/\s/g, '')) || 0;
+            suppliers[supId] = { rupt: parseFloat(pctStr) || 0, stock: nbStock, qi: nbQi };
           }
         }
         
