@@ -322,46 +322,36 @@ module.exports = async function handler(req, res) {
       }
 
     } else if (action === 'list_orders') {
-      // Scrape supplier-orders page for last 10 orders
+      // Fetch last 10 orders from API
       try {
-        var ordersUrl = 'https://products.app.deleev.com/supplier-orders?ordering=-pk&supplier_id=192&expected_delivery_date_gte&expected_delivery_date_lte&logistics_center_id=9';
-        var ordersResp = await fetch(ordersUrl, { headers: { 'Cookie': cookie, 'User-Agent': 'Mozilla/5.0' }, redirect: 'follow' });
-        if (!ordersResp.ok) return res.status(200).json({ error: 'HTTP ' + ordersResp.status });
-        var ordersHtml = await ordersResp.text();
-        if (ordersHtml.includes('connexion') || ordersHtml.includes('login')) {
-          return res.status(200).json({ error: 'Session expirée' });
-        }
-        
-        // Parse table rows
-        var orders = [];
-        var tbodyMatch = ordersHtml.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/i);
-        if (tbodyMatch) {
-          var trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-          var trM;
-          while ((trM = trRe.exec(tbodyMatch[1])) !== null && orders.length < 10) {
-            var row = trM[1];
-            var tds = [];
-            var tdRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
-            var tdM;
-            while ((tdM = tdRe.exec(row)) !== null) {
-              tds.push(tdM[1].replace(/<[^>]+>/g, '').trim());
-            }
-            // Extract order ID from link
-            var idMatch = row.match(/order_forms\/(\d+)|orderforms\/(\d+)|id=(\d+)/i);
-            var orderId = idMatch ? (idMatch[1] || idMatch[2] || idMatch[3]) : (tds[0] || '');
-            if (!orderId || tds.length < 5) continue;
-            
-            orders.push({
-              id: orderId,
-              centre: tds[1] || '',
-              totalProduits: tds[2] || '',
-              dateEnvoi: tds[4] || '',
-              dateLivraison: tds[5] || '',
-              statut: tds[6] || '',
-              montant: tds[8] || ''
-            });
+        var ordersUrl = 'https://api.deleev.com/order_forms/?ordering=-pk&supplier_id=192&logistics_center_id=9&page=0&offset=0&limit=10&exclude_merged=true&format_response=light';
+        var ordersResp = await fetch(ordersUrl, {
+          headers: {
+            'Authorization': 'Token ' + apiToken,
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0',
+            'Origin': 'https://products.app.deleev.com',
+            'Referer': 'https://products.app.deleev.com/'
           }
-        }
+        });
+        if (!ordersResp.ok) return res.status(200).json({ error: 'HTTP ' + ordersResp.status });
+        var data = await ordersResp.json();
+        var results = data.results || [];
+        
+        var orders = results.map(function(o) {
+          var statusMap = { sent: 'Envoyée', received: 'Reçue', draft: 'Brouillon', cancelled: 'Annulée', validated: 'Validée' };
+          return {
+            id: o.id,
+            status: statusMap[o.status] || o.status,
+            statusRaw: o.status,
+            dateSent: o.date_sent ? o.date_sent.split('T')[0] : '',
+            dateDelivery: o.expected_delivery_date || '',
+            totalProducts: o.total_item_count || 0,
+            totalHT: o.total_ht_ordered || 0,
+            totalReceived: o.total_ht_stock_received || 0,
+            stockpillingEnded: !!o.stockpilling_ended_at
+          };
+        });
         
         return res.status(200).json({ orders: orders });
       } catch (err) {
