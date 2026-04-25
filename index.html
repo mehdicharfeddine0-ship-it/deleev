@@ -297,8 +297,12 @@ td{padding:9px 10px;vertical-align:middle;}
             <button class="ebtn" onclick="uSearchCommande()" style="font-size:10px;padding:5px 10px">🔍</button>
           </div>
         </div>
+        <div style="margin-top:8px;text-align:center">
+          <button class="ebtn" onclick="uListOrders()" style="font-size:10px;padding:5px 12px;border-color:color-mix(in srgb,var(--units) 40%,transparent);color:var(--units);background:color-mix(in srgb,var(--units) 8%,transparent)">📋 Voir les commandes SU</button>
+        </div>
         <div id="uFetchStatus" style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);margin-top:6px;display:none"></div>
         <div id="uBLList" style="margin-top:8px;display:none;max-height:250px;overflow-y:auto"></div>
+        <div id="uOrdersList" style="margin-top:8px;display:none;max-height:250px;overflow-y:auto"></div>
       </div>
     </div>
     <div class="drop-zone" id="dzK" style="border-color:color-mix(in srgb,var(--ca) 40%,transparent)">
@@ -2365,6 +2369,7 @@ function uRender(){
   // Sub-tabs
   const tabs=[['vue','📊 Vue d\'ensemble'],['pal','🧊 Palettes'],['stock','👷 Mise en stock']];
   if(md)tabs.push(['rup','🔴 Ruptures ('+md.rupture+')']);
+  if(uOrderCsv)tabs.push(['closing','📋 Closing']);
   document.getElementById('uTabBar').innerHTML=tabs.map(([k,l])=>`<button class="u-tab${uSubTab===k?' active':''}" onclick="uSetSubTab('${k}')">${l}</button>`).join('');
 
   // Content
@@ -2373,6 +2378,7 @@ function uRender(){
   else if(uSubTab==='pal')uRenderPal(ct);
   else if(uSubTab==='stock')uRenderStock(ct);
   else if(uSubTab==='rup')uRenderRup(ct);
+  else if(uSubTab==='closing')uRenderClosing(ct);
 }
 
 function uGetPalAnalysis(){
@@ -2704,6 +2710,171 @@ let _lastProdCSV=null;
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════
+// COMMANDES SYSTÈME U + CLOSING
+// ═══════════════════════════════════════════════════════════════════════════
+let uOrderCsv=null, uOrderRows=[];
+
+async function uListOrders(){
+  const status=document.getElementById('uFetchStatus');
+  status.style.display='block';status.textContent='⏳ Chargement des commandes...';status.style.color='var(--units)';
+  try{
+    const resp=await fetch(U_PROXY+'?action=list_orders');
+    const data=await resp.json();
+    if(data.error){status.textContent='❌ '+data.error;status.style.color='var(--rupture)';return;}
+    const orders=data.orders||[];
+    if(!orders.length){status.textContent='❌ Aucune commande trouvée';status.style.color='var(--rupture)';return;}
+    status.textContent='✅ '+orders.length+' commandes';status.style.color='var(--ok)';
+    const el=document.getElementById('uOrdersList');
+    el.style.display='block';
+    el.innerHTML=orders.map(o=>`
+      <div onclick="uSelectOrder('${o.id}')" style="cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:4px;font-family:'Geist Mono',monospace;font-size:11px;display:flex;gap:8px;align-items:center;transition:background .15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+        <span style="font-weight:600;color:var(--units);min-width:55px">#${o.id}</span>
+        <span style="color:${o.statut.includes('Ter')||o.statut.includes('erm')?'var(--ok)':o.statut.includes('Env')?'var(--warn)':'var(--text2)'};min-width:50px">${o.statut}</span>
+        <span style="color:var(--text3);min-width:80px">envoi ${o.dateEnvoi}</span>
+        <span style="color:var(--text2);min-width:80px">livr. ${o.dateLivraison}</span>
+        <span style="color:var(--text3);margin-left:auto">${o.montant}</span>
+      </div>
+    `).join('');
+  }catch(e){status.textContent='❌ '+e.message;status.style.color='var(--rupture)';}
+}
+
+async function uSelectOrder(orderId){
+  const status=document.getElementById('uFetchStatus');
+  status.style.display='block';status.textContent='⏳ Chargement commande #'+orderId+'...';status.style.color='var(--units)';
+  try{
+    const resp=await fetch(U_PROXY+'?action=export_order&id='+orderId);
+    const data=await resp.json();
+    if(data.error){status.textContent='❌ '+data.error;status.style.color='var(--rupture)';return;}
+    if(!data.csv){status.textContent='❌ Pas de CSV';status.style.color='var(--rupture)';return;}
+    
+    // Parse CSV
+    uOrderCsv=data.csv;
+    uOrderRows=parseOrderFormsCsv(data.csv);
+    status.textContent='✅ Commande #'+orderId+' : '+uOrderRows.length+' produits chargés';
+    status.style.color='var(--ok)';
+    document.getElementById('uOrdersList').style.display='none';
+    
+    // If already in dashboard with BL loaded, refresh to show Closing tab
+    if(DU)uRender();
+  }catch(e){status.textContent='❌ '+e.message;status.style.color='var(--rupture)';}
+}
+
+function parseOrderFormsCsv(csvText){
+  const lines=csvText.split('\n').map(l=>l.replace(/\r/g,'').trim()).filter(l=>l);
+  if(lines.length<2)return[];
+  // Detect separator
+  const sep=lines[0].includes(';')?';':',';
+  const headers=lines[0].replace(/^\uFEFF/,'').split(sep).map(h=>h.trim());
+  const rows=[];
+  for(let i=1;i<lines.length;i++){
+    const vals=[];let cur='',inQ=false;
+    for(let c=0;c<lines[i].length;c++){
+      const ch=lines[i][c];
+      if(ch==='"'){inQ=!inQ;}
+      else if(ch===sep&&!inQ){vals.push(cur.trim());cur='';}
+      else{cur+=ch;}
+    }
+    vals.push(cur.trim());
+    if(vals.length<headers.length)continue;
+    const obj={};headers.forEach((h,j)=>obj[h]=vals[j]||'');
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function uRenderClosing(ct){
+  if(!uOrderRows.length||!uParsed){ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Geist Mono,monospace;font-size:12px">Chargez une commande CSV et un BL JSON pour voir le closing</div>';return;}
+  
+  const p=uParsed;
+  // Build lookup from BL: gtin -> quantiteLivreeEnUniteDeConsommation
+  const blLookup={};
+  p.raw.lignesLivraison.forEach(l=>{
+    const gtin=l.gtin||'';
+    const ucLiv=l.quantiteLivreeEnUniteDeConsommation||0;
+    if(!blLookup[gtin])blLookup[gtin]=0;
+    blLookup[gtin]+=ucLiv;
+  });
+  
+  // Build comparison rows
+  const compare=[];
+  uOrderRows.forEach(r=>{
+    const barcode=(r['Code barre']||'').trim();
+    const zone=r['zone']||r['Zonage']||'';
+    const zoneNum=parseInt(zone.split('.')[0])||0;
+    if(zoneNum<1000)return; // Only frais
+    
+    const ucCmd=parseInt(r['Quantité ajoutée'])||0;
+    const ucLiv=blLookup[barcode]||0;
+    const ecart=ucLiv-ucCmd;
+    
+    compare.push({
+      id:r['ID produit']||'',
+      name:r['Produit']||'',
+      barcode:barcode,
+      zone:zone,
+      zoneSort:zone.split('.').map(n=>parseInt(n)||0),
+      ucCmd:ucCmd,
+      ucLiv:ucLiv,
+      ecart:ecart,
+      matched:blLookup.hasOwnProperty(barcode)
+    });
+  });
+  
+  // Sort by zone ascending
+  compare.sort((a,b)=>{
+    for(let i=0;i<3;i++){
+      const diff=(a.zoneSort[i]||0)-(b.zoneSort[i]||0);
+      if(diff!==0)return diff;
+    }
+    return 0;
+  });
+  
+  // Stats
+  const totalProducts=compare.length;
+  const matched=compare.filter(c=>c.matched).length;
+  const withEcart=compare.filter(c=>c.ecart!==0).length;
+  const totalEcartNeg=compare.filter(c=>c.ecart<0).reduce((s,c)=>s+c.ecart,0);
+  const totalEcartPos=compare.filter(c=>c.ecart>0).reduce((s,c)=>s+c.ecart,0);
+  
+  let h='<div style="padding:12px 0">';
+  h+='<div class="u-kpis" style="margin-bottom:16px">';
+  h+='<div class="u-kpi"><div class="u-kpi-lbl">Produits frais</div><div class="u-kpi-val" style="color:var(--units)">'+totalProducts+'</div></div>';
+  h+='<div class="u-kpi"><div class="u-kpi-lbl">Matchés BL</div><div class="u-kpi-val" style="color:var(--ok)">'+matched+'</div></div>';
+  h+='<div class="u-kpi"><div class="u-kpi-lbl">Avec écart</div><div class="u-kpi-val" style="color:'+(withEcart>0?'var(--warn)':'var(--ok)')+'">'+withEcart+'</div></div>';
+  h+='<div class="u-kpi"><div class="u-kpi-lbl">Écart manque</div><div class="u-kpi-val" style="color:var(--rupture)">'+totalEcartNeg+'</div></div>';
+  h+='<div class="u-kpi"><div class="u-kpi-lbl">Écart surplus</div><div class="u-kpi-val" style="color:var(--ok)">+'+totalEcartPos+'</div></div>';
+  h+='</div>';
+  
+  // Table
+  h+='<table style="width:100%;border-collapse:collapse;font-family:Geist Mono,monospace;font-size:11px">';
+  h+='<thead><tr style="border-bottom:2px solid var(--border)">';
+  h+='<th style="text-align:left;padding:8px;color:var(--text3);font-weight:500">Produit</th>';
+  h+='<th style="text-align:left;padding:8px;color:var(--text3);font-weight:500;width:80px">Zone</th>';
+  h+='<th style="text-align:right;padding:8px;color:var(--text3);font-weight:500;width:60px">Cmd UC</th>';
+  h+='<th style="text-align:right;padding:8px;color:var(--text3);font-weight:500;width:60px">Livré UC</th>';
+  h+='<th style="text-align:right;padding:8px;color:var(--text3);font-weight:500;width:60px">Écart</th>';
+  h+='</tr></thead><tbody>';
+  
+  compare.forEach(c=>{
+    const ecartColor=c.ecart>0?'var(--ok)':c.ecart<0?'var(--rupture)':'var(--text3)';
+    const ecartSign=c.ecart>0?'+':'';
+    const rowBg=c.ecart!==0?'background:color-mix(in srgb,'+(c.ecart<0?'var(--rupture)':'var(--ok)')+' 4%,transparent)':'';
+    const prodLink='https://products.app.deleev.com/products/'+c.id+'/?tab=logs';
+    
+    h+='<tr style="border-bottom:1px solid var(--border);'+rowBg+'">';
+    h+='<td style="padding:8px"><a href="'+prodLink+'" target="_blank" style="color:var(--units);text-decoration:none">'+c.name+'</a> <span style="color:var(--text3);font-size:9px">#'+c.id+'</span></td>';
+    h+='<td style="padding:8px;color:var(--text3)">'+c.zone+'</td>';
+    h+='<td style="padding:8px;text-align:right;color:var(--text2)">'+c.ucCmd+'</td>';
+    h+='<td style="padding:8px;text-align:right;color:var(--text2);font-weight:500">'+(c.matched?c.ucLiv:'<span style="color:var(--text3)">—</span>')+'</td>';
+    h+='<td style="padding:8px;text-align:right;color:'+ecartColor+';font-weight:700">'+ecartSign+c.ecart+'</td>';
+    h+='</tr>';
+  });
+  
+  h+='</tbody></table></div>';
+  ct.innerHTML=h;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // MODULE ÉTATS D'INVENTAIRES (CASSE)
 // ═══════════════════════════════════════════════════════════════════════════
 let DI=null, iView='all', iRawRows=[], iShowAllZones=false;
@@ -2798,8 +2969,8 @@ function iRender(){
   let products=Object.values(byProd);
 
   // Apply view filter
-  if(iView==='neg')products=products.filter(p=>p.totalNeg<0);
-  if(iView==='pos')products=products.filter(p=>p.totalPos>0);
+  if(iView==='neg')products=products.filter(p=>p.netChange<0);
+  if(iView==='pos')products=products.filter(p=>p.netChange>0);
   if(iView==='alert')products=products.filter(p=>p.netValo<=-75);
 
   // Sort by biggest impact (most negative net change first)
