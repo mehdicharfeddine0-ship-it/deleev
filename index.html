@@ -2726,15 +2726,19 @@ async function uListOrders(){
     status.textContent='✅ '+orders.length+' commandes';status.style.color='var(--ok)';
     const el=document.getElementById('uOrdersList');
     el.style.display='block';
-    el.innerHTML=orders.map(o=>`
+    el.innerHTML=orders.map(o=>{
+      const statusColor=o.statusRaw==='sent'?'var(--warn)':o.stockpillingEnded?'var(--ok)':'var(--text2)';
+      const montant=o.totalHT?Math.round(o.totalHT).toLocaleString('fr-FR')+'€':'';
+      return`
       <div onclick="uSelectOrder('${o.id}')" style="cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:4px;font-family:'Geist Mono',monospace;font-size:11px;display:flex;gap:8px;align-items:center;transition:background .15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
         <span style="font-weight:600;color:var(--units);min-width:55px">#${o.id}</span>
-        <span style="color:${o.statut.includes('Ter')||o.statut.includes('erm')?'var(--ok)':o.statut.includes('Env')?'var(--warn)':'var(--text2)'};min-width:50px">${o.statut}</span>
-        <span style="color:var(--text3);min-width:80px">envoi ${o.dateEnvoi}</span>
-        <span style="color:var(--text2);min-width:80px">livr. ${o.dateLivraison}</span>
-        <span style="color:var(--text3);margin-left:auto">${o.montant}</span>
-      </div>
-    `).join('');
+        <span style="color:${statusColor};min-width:60px">${o.status}</span>
+        <span style="color:var(--text3);min-width:80px">envoi ${o.dateSent}</span>
+        <span style="color:var(--text2);min-width:80px">livr. ${o.dateDelivery}</span>
+        <span style="color:var(--text3);min-width:40px">${o.totalProducts} prod.</span>
+        <span style="color:var(--ca);margin-left:auto">${montant}</span>
+      </div>`;
+    }).join('');
   }catch(e){status.textContent='❌ '+e.message;status.style.color='var(--rupture)';}
 }
 
