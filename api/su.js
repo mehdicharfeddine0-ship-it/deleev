@@ -358,6 +358,32 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({ error: 'list_orders error: ' + err.message });
       }
 
+    } else if (action === 'probe_export') {
+      var orderId = req.query.id || '120142';
+      try {
+        var orderUrl = 'https://api.deleev.com/order_forms/?id=' + orderId;
+        var orderResp = await fetch(orderUrl, {
+          headers: {
+            'Authorization': 'Token ' + apiToken,
+            'Accept': 'application/json, text/plain, */*',
+            'User-Agent': 'Mozilla/5.0',
+            'Origin': 'https://products.app.deleev.com',
+            'Referer': 'https://products.app.deleev.com/'
+          }
+        });
+        var text = await orderResp.text();
+        return res.status(200).json({ 
+          status: orderResp.status, 
+          length: text.length,
+          contentType: orderResp.headers.get('content-type'),
+          snippet: text.substring(0, 500),
+          isCSV: text.includes(';') && text.includes('\n') && !text.startsWith('{'),
+          isJSON: text.startsWith('{') || text.startsWith('[')
+        });
+      } catch (err) {
+        return res.status(200).json({ error: err.message });
+      }
+
     } else if (action === 'export_order') {
       // Fetch order CSV from API
       var orderId = req.query.id || '';
