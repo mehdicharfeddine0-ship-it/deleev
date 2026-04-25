@@ -2817,14 +2817,13 @@ function iRender(){
   });
   // Alertes: mouvements qui s'annulent (net=0 mais y'a eu du négatif) = attention
   const alertCount=Object.values(byProd).filter(p=>p.totalNeg<=-5||p.totalValo>=20).length;
-  const attentionCount=Object.values(byProd).filter(p=>p.netChange===0&&p.totalNeg<0&&p.mvts.length>1).length;
+  
 
   document.getElementById('iStatsBar').innerHTML=
     '<div class="u-kpi"><div class="u-kpi-lbl">Perte Inventaire</div><div class="u-kpi-val" style="color:var(--rupture)">'+Math.abs(perteInv).toFixed(0)+'€</div></div>'+
     '<div class="u-kpi"><div class="u-kpi-lbl">Perte DLC</div><div class="u-kpi-val" style="color:var(--warn)">'+Math.abs(perteDlc).toFixed(0)+'€</div></div>'+
     '<div class="u-kpi"><div class="u-kpi-lbl">Perte Autre</div><div class="u-kpi-val">'+Math.abs(perteAutre).toFixed(0)+'€</div></div>'+
-    '<div class="u-kpi"><div class="u-kpi-lbl">⚠ Alertes</div><div class="u-kpi-val" style="color:'+(alertCount>0?'var(--rupture)':'var(--ok)')+'">'+alertCount+'</div></div>'+
-    '<div class="u-kpi"><div class="u-kpi-lbl">⚡ Attention</div><div class="u-kpi-val" style="color:'+(attentionCount>0?'var(--warn)':'var(--ok)')+'">'+attentionCount+'</div><div class="u-kpi-sub">net=0 mais mvts</div></div>';
+    '<div class="u-kpi"><div class="u-kpi-lbl">⚠ Alertes</div><div class="u-kpi-val" style="color:'+(alertCount>0?'var(--rupture)':'var(--ok)')+'">'+alertCount+'</div></div>';
 
   document.getElementById('iPeriod').textContent=products.length+' produits · '+rows.length+' mvts';
 
@@ -2834,15 +2833,15 @@ function iRender(){
 
   el.innerHTML=products.map(p=>{
     const isAlert=p.totalNeg<=-5||p.totalValo>=20;
-    const isAttention=p.netChange===0&&p.totalNeg<0&&p.mvts.length>1;
+    
     const netColor=p.netChange>0?'var(--ok)':p.netChange<0?'var(--rupture)':'var(--text3)';
     const netSign=p.netChange>0?'+':'';
     const prodLink='https://products.app.deleev.com/products/'+p.id+'/edit';
-    const borderCol=isAlert?'color-mix(in srgb,var(--rupture) 30%,var(--border))':isAttention?'color-mix(in srgb,var(--warn) 30%,var(--border))':'var(--border)';
+    const borderCol=isAlert?'color-mix(in srgb,var(--rupture) 30%,var(--border))':''var(--border)';
 
     return'<div style="background:var(--surface);border:1px solid '+borderCol+';border-radius:10px;margin-bottom:6px;overflow:hidden">'+
       '<div onclick="iToggle(\'ip_'+p.id+'\')" style="cursor:pointer;padding:10px 16px;display:flex;align-items:center;gap:8px">'+
-        '<span style="width:22px;text-align:center;flex-shrink:0">'+(isAlert?'<span style="color:var(--rupture)">⚠</span>':isAttention?'<span style="color:var(--warn)">⚡</span>':'')+'</span>'+
+        '<span style="width:22px;text-align:center;flex-shrink:0">'+(isAlert?'<span style="color:var(--rupture)">⚠</span>':''')+'</span>'+
         '<a href="'+prodLink+'" target="_blank" onclick="event.stopPropagation()" style="flex:1;min-width:180px;font-size:12px;font-weight:500;color:var(--units);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+p.name+'</a>'+
         '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3);width:60px">#'+p.id+'</span>'+
         '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3);width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+p.fournisseur+'</span>'+
