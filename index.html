@@ -2798,7 +2798,7 @@ function iRender(){
   // Apply view filter
   if(iView==='neg')products=products.filter(p=>p.totalNeg<0);
   if(iView==='pos')products=products.filter(p=>p.totalPos>0);
-  if(iView==='alert')products=products.filter(p=>p.totalNeg<=-5||p.totalValo>=20);
+  if(iView==='alert')products=products.filter(p=>p.totalValo>=75);
 
   // Sort by biggest impact (most negative net change first)
   products.sort((a,b)=>a.netChange-b.netChange);
@@ -2816,7 +2816,7 @@ function iRender(){
     }
   });
   // Alertes: mouvements qui s'annulent (net=0 mais y'a eu du négatif) = attention
-  const alertCount=Object.values(byProd).filter(p=>p.totalNeg<=-5||p.totalValo>=20).length;
+  const alertCount=Object.values(byProd).filter(p=>p.totalValo>=75).length;
   
 
   document.getElementById('iStatsBar').innerHTML=
@@ -2832,11 +2832,11 @@ function iRender(){
   if(!products.length){el.innerHTML='<div style="text-align:center;padding:60px;color:var(--text3);font-family:Geist Mono,monospace;font-size:12px">Aucun mouvement</div>';return;}
 
   el.innerHTML=products.map(p=>{
-    const isAlert=p.totalNeg<=-5||p.totalValo>=20;
+    const isAlert=p.totalValo>=75;
     
     const netColor=p.netChange>0?'var(--ok)':p.netChange<0?'var(--rupture)':'var(--text3)';
     const netSign=p.netChange>0?'+':'';
-    const prodLink='https://products.app.deleev.com/products/'+p.id+'/edit';
+    const prodLink='https://products.app.deleev.com/products/'+p.id+'/?tab=logs';
     const borderCol=isAlert?'color-mix(in srgb,var(--rupture) 30%,var(--border))':'var(--border)';
 
     return'<div style="background:var(--surface);border:1px solid '+borderCol+';border-radius:10px;margin-bottom:6px;overflow:hidden">'+
