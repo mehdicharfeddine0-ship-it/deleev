@@ -318,7 +318,9 @@ td{padding:9px 10px;vertical-align:middle;}
       <div class="file-ok" id="fIname" style="display:none"></div>
       <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px" onclick="event.stopPropagation()">
         <div style="display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap">
-          <input type="date" id="casseDate" style="font-family:'Geist Mono',monospace;font-size:11px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;outline:none">
+          <input type="date" id="casseDateMin" style="font-family:'Geist Mono',monospace;font-size:11px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;outline:none">
+          <span style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3)">→</span>
+          <input type="date" id="casseDateMax" style="font-family:'Geist Mono',monospace;font-size:11px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;outline:none">
           <button class="ebtn" onclick="fetchCasseFromAPI()" style="font-size:10px;padding:5px 12px;border-color:color-mix(in srgb,var(--promo) 40%,transparent);color:var(--promo);background:color-mix(in srgb,var(--promo) 8%,transparent)">📋 Charger</button>
         </div>
         <div id="casseFetchStatus" style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);margin-top:6px;display:none"></div>
@@ -868,6 +870,7 @@ function switchTab(t){
   document.getElementById('tabC').classList.toggle('active',t==='c');
   document.getElementById('tabU').classList.toggle('active',t==='u');
   document.getElementById('tabK').classList.toggle('active',t==='k');
+  document.getElementById('tabI').classList.toggle('active',t==='i');
   document.getElementById('vV').classList.toggle('on',t==='v');
   document.getElementById('vP').classList.toggle('on',t==='p');
   document.getElementById('vC').classList.toggle('on',t==='c');
@@ -948,7 +951,7 @@ setupDrop('dzC','fC','fCname',(text,name)=>{
   }
 })();
 function checkReady(){
-  const ok=DV||DP||DC||DU;
+  const ok=DV||DP||DC||DU||DI;
   const btn=document.getElementById('btnL');
   btn.classList.toggle('ready',!!ok);
 }
@@ -1079,7 +1082,7 @@ function detectRuptFournisseur(){
 
 // LAUNCH
 function launch(){
-  if(!DV&&!DP&&!DC&&!DU)return;
+  if(!DV&&!DP&&!DC&&!DU&&!DI)return;
   document.getElementById('drop').style.display='none';
   document.getElementById('dash').style.display='block';
   const parts=[];
@@ -1087,6 +1090,7 @@ function launch(){
   if(DP)parts.push(`${DP.length} produits`);
   if(DC)parts.push(`${DC.length} fournisseurs frais`);
   if(DU)parts.push('Système U frais');
+  if(DI)parts.push(`${iRawRows.length} mouvements inventaire`);
   document.getElementById('topMeta').textContent=parts.join(' · ');
   // Affiche le nom du fournisseur dans la topbar si on a un seul fournisseur détecté
   if(supplierName){
@@ -1102,13 +1106,15 @@ function launch(){
     st.style.display='inline';
   }
   if(DV){ruptFournisseurIds=detectRuptFournisseur();}
-  if(!DV&&!DP&&!DC&&DU){switchTab('u');}
+  if(!DV&&!DP&&!DC&&!DU&&DI){switchTab('i');}
+  else if(!DV&&!DP&&!DC&&DU){switchTab('u');}
   else if(!DV&&DP){switchTab('p');}
   else if(!DV&&!DP&&DC){switchTab('c');}
   if(DV){buildPer();renderV();}
   if(DP){renderCatButtons();renderP();renderCatPanel();}
   if(DC){cInitDash();}
   if(DU){uInit();}
+  if(DI){iRender();}
 }
 
 // ──────────────────────────────────────────────
@@ -2845,18 +2851,19 @@ function iToggle(id){const el=document.getElementById(id);if(el)el.style.display
 
 // Fetch casse from API
 async function fetchCasseFromAPI(){
-  const dateInput=document.getElementById('casseDate');
-  const date=dateInput?.value||'';
-  if(!date){alert('Sélectionnez une date');return;}
+  const dateMin=document.getElementById('casseDateMin')?.value||'';
+  const dateMax=document.getElementById('casseDateMax')?.value||dateMin;
+  if(!dateMin){alert('Sélectionnez au moins une date de début');return;}
   const status=document.getElementById('casseFetchStatus');
   status.style.display='block';status.textContent='⏳ Chargement...';status.style.color='var(--promo)';
   try{
-    const resp=await fetch(U_PROXY+'?action=fetch_casse&date_min='+date+'&date_max='+date);
+    const resp=await fetch(U_PROXY+'?action=fetch_casse&date_min='+dateMin+'&date_max='+(dateMax||dateMin));
     const data=await resp.json();
     if(data.error){status.textContent='❌ '+data.error;status.style.color='var(--rupture)';return;}
     if(!data.csv){status.textContent='❌ Pas de CSV';status.style.color='var(--rupture)';return;}
     const rows=parseCasseCsv(data.csv);
-    document.getElementById('fIname').textContent='✓ '+rows.length+' mouvements ('+date+')';
+    const label=dateMin===dateMax?dateMin:dateMin+' → '+dateMax;
+    document.getElementById('fIname').textContent='✓ '+rows.length+' mouvements ('+label+')';
     document.getElementById('fIname').style.display='block';
     document.getElementById('dzI').style.borderColor='var(--promo)';
     status.textContent='✅ '+rows.length+' mouvements chargés';status.style.color='var(--ok)';
@@ -2879,8 +2886,8 @@ document.getElementById('fI')?.addEventListener('change',function(e){
   };
   reader.readAsText(file,'utf-8');
 });
-// Set default date to today
-(function(){const d=document.getElementById('casseDate');if(d)d.value=new Date().toISOString().split('T')[0];})();
+// Set default dates to today
+(function(){const t=new Date().toISOString().split('T')[0];const d1=document.getElementById('casseDateMin');const d2=document.getElementById('casseDateMax');if(d1)d1.value=t;if(d2)d2.value=t;})();
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CALCULATEUR DE VARIATION
