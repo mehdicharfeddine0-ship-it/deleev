@@ -2837,11 +2837,11 @@ function iRender(){
     const netColor=p.netChange>0?'var(--ok)':p.netChange<0?'var(--rupture)':'var(--text3)';
     const netSign=p.netChange>0?'+':'';
     const prodLink='https://products.app.deleev.com/products/'+p.id+'/edit';
-    const borderCol=isAlert?'color-mix(in srgb,var(--rupture) 30%,var(--border))':''var(--border)';
+    const borderCol=isAlert?'color-mix(in srgb,var(--rupture) 30%,var(--border))':'var(--border)';
 
     return'<div style="background:var(--surface);border:1px solid '+borderCol+';border-radius:10px;margin-bottom:6px;overflow:hidden">'+
       '<div onclick="iToggle(\'ip_'+p.id+'\')" style="cursor:pointer;padding:10px 16px;display:flex;align-items:center;gap:8px">'+
-        '<span style="width:22px;text-align:center;flex-shrink:0">'+(isAlert?'<span style="color:var(--rupture)">⚠</span>':''')+'</span>'+
+        '<span style="width:22px;text-align:center;flex-shrink:0">'+(isAlert?'<span style="color:var(--rupture)">⚠</span>':'')+'</span>'+
         '<a href="'+prodLink+'" target="_blank" onclick="event.stopPropagation()" style="flex:1;min-width:180px;font-size:12px;font-weight:500;color:var(--units);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+p.name+'</a>'+
         '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3);width:60px">#'+p.id+'</span>'+
         '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3);width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+p.fournisseur+'</span>'+
