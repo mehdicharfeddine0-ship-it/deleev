@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr" data-theme="dark">
+<html lang="fr" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -342,7 +342,7 @@ td{padding:9px 10px;vertical-align:middle;}
       <button class="tab" id="tabK" onclick="requireAuth('k')">📈 KPI Frais</button>
       <button class="tab" id="tabI" onclick="switchTab('i')">📋 Inventaires</button>
     </div>
-    <div class="kpis" id="kpiV">
+    <div class="kpis" id="kpiV" style="display:none">
       <div class="kpi"><div class="kpi-lbl">CA TTC</div><div class="kpi-val kv-ca" id="kca">—</div></div>
       <div class="kpi"><div class="kpi-lbl">Unités</div><div class="kpi-val kv-u" id="ku">—</div></div>
       <div class="kpi"><div class="kpi-lbl">CA Perdu est.</div><div class="kpi-val kv-r" id="kcp">—</div></div>
@@ -637,6 +637,10 @@ td{padding:9px 10px;vertical-align:middle;}
         </div>
         <div class="vsep"></div>
         <input class="csi" id="iSearch" placeholder="Rechercher…" oninput="iRender()" style="max-width:160px">
+        <div class="seg">
+          <button class="sb active" id="iZoneFrais" onclick="iShowAllZones=false;document.getElementById('iZoneFrais').classList.add('active');document.getElementById('iZoneAll').classList.remove('active');iRender()">Frais</button>
+          <button class="sb" id="iZoneAll" onclick="iShowAllZones=true;document.getElementById('iZoneAll').classList.add('active');document.getElementById('iZoneFrais').classList.remove('active');iRender()">Tout</button>
+        </div>
         <span class="rc" id="iPeriod">—</span>
       </div>
 
@@ -2687,7 +2691,7 @@ let _lastProdCSV=null;
 // ═══════════════════════════════════════════════════════════════════════════
 // MODULE ÉTATS D'INVENTAIRES (CASSE)
 // ═══════════════════════════════════════════════════════════════════════════
-let DI=null, iView='all', iRawRows=[];
+let DI=null, iView='all', iRawRows=[], iShowAllZones=false;
 
 function parseCasseCsv(csvText){
   const lines=csvText.split('\n').map(l=>l.replace(/\r/g,'').trim()).filter(l=>l);
@@ -2756,6 +2760,8 @@ function iRender(){
     if(fST&&r['Sous-type']!==fST)return false;
     if(fP&&r['Fait par']!==fP)return false;
     if(q&&!(r['Nom du produit']||'').toLowerCase().includes(q)&&!(r['Id produit']||'').includes(q)&&!(r['Fait par']||'').toLowerCase().includes(q))return false;
+    // Default: only show frais products (zone >= 1000) unless "all zones" filter is on
+    if(!iShowAllZones){const z=parseInt((r['Zonage']||'0').split('.')[0])||0;if(z<1000)return false;}
     return true;
   });
 
