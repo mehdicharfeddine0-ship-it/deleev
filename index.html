@@ -2799,7 +2799,7 @@ function uRenderClosing(ct){
   // Build lookup from BL: gtin -> quantiteLivreeEnUniteDeConsommation
   const blLookup={};
   (DU.lignesLivraison||[]).forEach(l=>{
-    const gtin=l.gtin||'';
+    const gtin=(l.gtin||'').padStart(14,'0');
     const ucLiv=l.quantiteLivreeEnUniteDeConsommation||0;
     if(!blLookup[gtin])blLookup[gtin]=0;
     blLookup[gtin]+=ucLiv;
@@ -2808,7 +2808,7 @@ function uRenderClosing(ct){
   // Build comparison rows from JSON products
   const compare=[];
   uOrderRows.forEach(r=>{
-    const barcode=(r.barcode||'').trim();
+    const barcode=(r.barcode||'').trim().padStart(14,'0');
     const zone=r.zone||'';
     const zoneNum=parseInt(zone.split('.')[0])||0;
     if(zoneNum<1000)return; // Only frais
