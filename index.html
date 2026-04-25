@@ -2826,7 +2826,7 @@ function iRender(){
     '<div class="u-kpi"><div class="u-kpi-lbl">⚠ Alertes</div><div class="u-kpi-val" style="color:'+(alertCount>0?'var(--rupture)':'var(--ok)')+'">'+alertCount+'</div></div>'+
     '<div class="u-kpi"><div class="u-kpi-lbl">⚡ Attention</div><div class="u-kpi-val" style="color:'+(attentionCount>0?'var(--warn)':'var(--ok)')+'">'+attentionCount+'</div><div class="u-kpi-sub">net=0 mais mvts</div></div>';
 
-  document.getElementById('iPeriod').textContent=products.length+' produits · '+totalMvts+' mvts';
+  document.getElementById('iPeriod').textContent=products.length+' produits · '+rows.length+' mvts';
 
   // Render products
   const el=document.getElementById('iContent');
