@@ -282,6 +282,45 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({ error: 'Google Sheets error: ' + err.message });
       }
 
+    } else if (action === 'probe_orders') {
+      try {
+        var ordersUrl = 'https://products.app.deleev.com/supplier-orders?ordering=-pk&supplier_id=192&expected_delivery_date_gte&expected_delivery_date_lte&logistics_center_id=9';
+        var ordersResp = await fetch(ordersUrl, { headers: { 'Cookie': cookie, 'User-Agent': 'Mozilla/5.0' }, redirect: 'follow' });
+        var ordersHtml = await ordersResp.text();
+        
+        // Check if it's a SPA (React/Vue) that needs JS to render
+        var hasTable = ordersHtml.includes('<table');
+        var hasTbody = ordersHtml.includes('<tbody');
+        var hasReact = ordersHtml.includes('__NEXT') || ordersHtml.includes('react') || ordersHtml.includes('bundle.js');
+        var hasVue = ordersHtml.includes('vue') || ordersHtml.includes('app.js');
+        
+        // Get first table if exists
+        var tableSnippet = '';
+        if (hasTable) {
+          var tIdx = ordersHtml.indexOf('<table');
+          tableSnippet = ordersHtml.substring(tIdx, tIdx + 2000);
+        }
+        
+        // Check for API calls in the HTML
+        var apiCalls = ordersHtml.match(/fetch\(["']([^"']+)["']/g) || [];
+        var axiosCalls = ordersHtml.match(/axios[^(]*\(["']([^"']+)["']/g) || [];
+        
+        return res.status(200).json({
+          status: ordersResp.status,
+          length: ordersHtml.length,
+          hasTable: hasTable,
+          hasTbody: hasTbody,
+          hasReact: hasReact,
+          hasVue: hasVue,
+          snippet: ordersHtml.substring(0, 500),
+          tableSnippet: tableSnippet.substring(0, 1500),
+          apiCalls: apiCalls.slice(0, 5),
+          title: (ordersHtml.match(/<title>([^<]+)<\/title>/) || [])[1] || ''
+        });
+      } catch (err) {
+        return res.status(200).json({ error: err.message });
+      }
+
     } else if (action === 'list_orders') {
       // Scrape supplier-orders page for last 10 orders
       try {
