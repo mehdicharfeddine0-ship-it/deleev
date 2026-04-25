@@ -342,20 +342,6 @@ td{padding:9px 10px;vertical-align:middle;}
       <button class="tab" id="tabK" onclick="requireAuth('k')">📈 KPI Frais</button>
       <button class="tab" id="tabI" onclick="switchTab('i')">📋 Inventaires</button>
     </div>
-    <div class="kpis" id="kpiV" style="display:none">
-      <div class="kpi"><div class="kpi-lbl">CA TTC</div><div class="kpi-val kv-ca" id="kca">—</div></div>
-      <div class="kpi"><div class="kpi-lbl">Unités</div><div class="kpi-val kv-u" id="ku">—</div></div>
-      <div class="kpi"><div class="kpi-lbl">CA Perdu est.</div><div class="kpi-val kv-r" id="kcp">—</div></div>
-      <div class="kpi"><div class="kpi-lbl">Taux Rupture</div><div class="kpi-val kv-r" id="kr">—</div></div>
-    </div>
-    <div class="kpis" id="kpiP" style="display:none">
-      <div class="kpi"><div class="kpi-lbl">Produits</div><div class="kpi-val kv-u" id="knb">—</div></div>
-      <div class="kpi"><div class="kpi-lbl">⚠ Problèmes</div><div class="kpi-val kv-r" id="kprob">—</div></div>
-      <div class="kpi"><div class="kpi-lbl">Cat 1 (2-5j)</div><div class="kpi-val kv-ok" id="kc1">—</div></div>
-      <div class="kpi"><div class="kpi-lbl">Cat 4 (22j+)</div><div class="kpi-val kv-promo" id="kc4">—</div></div>
-      <div class="kpi"><div class="kpi-lbl">CA Perdu est.</div><div class="kpi-val kv-r" id="kpCP">—</div></div>
-      <div class="kpi"><div class="kpi-lbl">Taux Rupt. moy.</div><div class="kpi-val kv-r" id="kpTR">—</div></div>
-    </div>
     <a class="qlnk" href="https://admin.deleev.com/stats/stock_monitor/suppliers_v2" target="_blank">📉 Anti-rupture</a>
     <a class="qlnk" href="https://products.app.deleev.com/products-qiqd-rules" target="_blank">⚖ Règles QI/QD</a>
     <a class="qlnk" href="scan.html" target="_blank">📷 Scan BL</a>
@@ -366,6 +352,12 @@ td{padding:9px 10px;vertical-align:middle;}
 
   <!-- VENTES -->
   <div id="vV" class="on">
+    <div class="kpis" id="kpiV" style="padding:8px 24px">
+      <div class="kpi"><div class="kpi-lbl">CA TTC</div><div class="kpi-val kv-ca" id="kca">—</div></div>
+      <div class="kpi"><div class="kpi-lbl">Unités</div><div class="kpi-val kv-u" id="ku">—</div></div>
+      <div class="kpi"><div class="kpi-lbl">CA Perdu est.</div><div class="kpi-val kv-r" id="kcp">—</div></div>
+      <div class="kpi"><div class="kpi-lbl">Taux Rupture</div><div class="kpi-val kv-r" id="kr">—</div></div>
+    </div>
     <div class="controls">
       <span class="cl">Granularité</span>
       <div class="seg">
@@ -402,6 +394,14 @@ td{padding:9px 10px;vertical-align:middle;}
 
   <!-- PRODUITS -->
   <div id="vP">
+    <div class="kpis" id="kpiP" style="padding:8px 24px">
+      <div class="kpi"><div class="kpi-lbl">Produits</div><div class="kpi-val kv-u" id="knb">—</div></div>
+      <div class="kpi"><div class="kpi-lbl">⚠ Problèmes</div><div class="kpi-val kv-r" id="kprob">—</div></div>
+      <div class="kpi"><div class="kpi-lbl">Cat 1 (2-5j)</div><div class="kpi-val kv-ok" id="kc1">—</div></div>
+      <div class="kpi"><div class="kpi-lbl">Cat 4 (22j+)</div><div class="kpi-val kv-promo" id="kc4">—</div></div>
+      <div class="kpi"><div class="kpi-lbl">CA Perdu est.</div><div class="kpi-val kv-r" id="kpCP">—</div></div>
+      <div class="kpi"><div class="kpi-lbl">Taux Rupt. moy.</div><div class="kpi-val kv-r" id="kpTR">—</div></div>
+    </div>
     <!-- Panneau catégories éditables -->
     <div class="cat-panel" id="catPanel" style="display:none">
       <div class="cat-panel-header">
@@ -881,8 +881,7 @@ function switchTab(t){
   document.getElementById('vU').classList.toggle('on',t==='u');
   document.getElementById('vK').classList.toggle('on',t==='k');
   document.getElementById('vI').classList.toggle('on',t==='i');
-  document.getElementById('kpiV').style.display=t==='v'?'flex':'none';
-  document.getElementById('kpiP').style.display=t==='p'?'flex':'none';
+  // KPIs are now inside their respective pages, no need to toggle here
   if(t==='c'){
     document.getElementById('cNoData').style.display=DC?'none':'flex';
     document.getElementById('cDash').style.display=DC?'block':'none';
