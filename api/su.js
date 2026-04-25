@@ -371,21 +371,26 @@ module.exports = async function handler(req, res) {
             'Referer': 'https://products.app.deleev.com/'
           }
         });
-        var text = await orderResp.text();
+        var data = await orderResp.json();
+        var order = data.results && data.results[0] ? data.results[0] : null;
+        if (!order) return res.status(200).json({ error: 'No order found' });
+        
+        var items = order.items || [];
+        var firstItem = items[0] || null;
+        
         return res.status(200).json({ 
-          status: orderResp.status, 
-          length: text.length,
-          contentType: orderResp.headers.get('content-type'),
-          snippet: text.substring(0, 500),
-          isCSV: text.includes(';') && text.includes('\n') && !text.startsWith('{'),
-          isJSON: text.startsWith('{') || text.startsWith('[')
+          orderId: order.id,
+          totalItems: items.length,
+          firstItem: firstItem ? JSON.stringify(firstItem).substring(0, 1500) : 'null',
+          itemKeys: firstItem ? Object.keys(firstItem) : [],
+          productKeys: firstItem && firstItem.product ? Object.keys(firstItem.product) : []
         });
       } catch (err) {
         return res.status(200).json({ error: err.message });
       }
 
     } else if (action === 'export_order') {
-      // Fetch order CSV from API
+      // Fetch order details from API (JSON with items)
       var orderId = req.query.id || '';
       if (!orderId) return res.status(200).json({ error: 'id requis' });
       
@@ -401,8 +406,40 @@ module.exports = async function handler(req, res) {
           }
         });
         if (!orderResp.ok) return res.status(200).json({ error: 'HTTP ' + orderResp.status });
-        var csvText = await orderResp.text();
-        return res.status(200).json({ csv: csvText, id: orderId });
+        var data = await orderResp.json();
+        var order = data.results && data.results[0] ? data.results[0] : null;
+        if (!order) return res.status(200).json({ error: 'Commande non trouvée' });
+        
+        var items = order.items || [];
+        var products = [];
+        for (var i = 0; i < items.length; i++) {
+          var item = items[i];
+          var prod = item.product || {};
+          // Get zone from by_centers for center 9
+          var zone = '';
+          if (prod.by_centers && Array.isArray(prod.by_centers)) {
+            for (var j = 0; j < prod.by_centers.length; j++) {
+              if (prod.by_centers[j].center === 9) {
+                var bc = prod.by_centers[j];
+                zone = (bc.aisle || '') + '.' + (bc.shelf || '') + '.' + (bc.tier || '');
+                break;
+              }
+            }
+          }
+          products.push({
+            id: prod.id || item.product_id || 0,
+            name: prod.selling_name || '',
+            barcode: prod.barcode || '',
+            zone: zone,
+            packaging: item.packaging || 1,
+            qtyColis: item.quantity || 0,
+            qtyAdded: item.added_quantity || 0,
+            qi: item.quantity_ideal || 0,
+            added: !!item.added
+          });
+        }
+        
+        return res.status(200).json({ id: orderId, count: products.length, products: products });
       } catch (err) {
         return res.status(200).json({ error: 'export_order error: ' + err.message });
       }
