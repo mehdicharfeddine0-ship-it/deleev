@@ -2784,13 +2784,15 @@ function iRender(){
   const byProd={};
   rows.forEach(r=>{
     const pid=r['Id produit'];
-    if(!byProd[pid])byProd[pid]={id:pid,name:r['Nom du produit'],fournisseur:r['Fournisseur'],zone:r['Zonage'],mvts:[],totalPos:0,totalNeg:0,netChange:0,totalValo:0};
+    if(!byProd[pid])byProd[pid]={id:pid,name:r['Nom du produit'],fournisseur:r['Fournisseur'],zone:r['Zonage'],mvts:[],totalPos:0,totalNeg:0,netChange:0,totalValo:0,netValo:0};
     const g=byProd[pid];
     g.mvts.push(r);
     if(r._change>0)g.totalPos+=r._change;
     if(r._change<0)g.totalNeg+=r._change;
     g.netChange+=r._change;
     g.totalValo+=r._valo;
+    // Perte nette: valo négative quand déstockage, positive quand restockage
+    g.netValo+=(r._change<0?-Math.abs(r._valo):Math.abs(r._valo));
   });
 
   let products=Object.values(byProd);
@@ -2798,7 +2800,7 @@ function iRender(){
   // Apply view filter
   if(iView==='neg')products=products.filter(p=>p.totalNeg<0);
   if(iView==='pos')products=products.filter(p=>p.totalPos>0);
-  if(iView==='alert')products=products.filter(p=>p.totalValo>=75);
+  if(iView==='alert')products=products.filter(p=>p.netValo<=-75);
 
   // Sort by biggest impact (most negative net change first)
   products.sort((a,b)=>a.netChange-b.netChange);
@@ -2816,7 +2818,7 @@ function iRender(){
     }
   });
   // Alertes: mouvements qui s'annulent (net=0 mais y'a eu du négatif) = attention
-  const alertCount=Object.values(byProd).filter(p=>p.totalValo>=75).length;
+  const alertCount=Object.values(byProd).filter(p=>p.netValo<=-75).length;
   
 
   document.getElementById('iStatsBar').innerHTML=
@@ -2832,7 +2834,7 @@ function iRender(){
   if(!products.length){el.innerHTML='<div style="text-align:center;padding:60px;color:var(--text3);font-family:Geist Mono,monospace;font-size:12px">Aucun mouvement</div>';return;}
 
   el.innerHTML=products.map(p=>{
-    const isAlert=p.totalValo>=75;
+    const isAlert=p.netValo<=-75;
     
     const netColor=p.netChange>0?'var(--ok)':p.netChange<0?'var(--rupture)':'var(--text3)';
     const netSign=p.netChange>0?'+':'';
@@ -2849,7 +2851,7 @@ function iRender(){
         '<span style="font-family:Geist Mono,monospace;font-size:11px;color:var(--ok);font-weight:600;width:40px;text-align:right">+'+(p.totalPos)+'</span>'+
         '<span style="font-family:Geist Mono,monospace;font-size:11px;color:var(--rupture);font-weight:600;width:40px;text-align:right">'+(p.totalNeg)+'</span>'+
         '<span style="font-family:Geist Mono,monospace;font-size:12px;font-weight:700;color:'+netColor+';width:50px;text-align:right">'+netSign+p.netChange+'</span>'+
-        '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--warn);width:50px;text-align:right">'+p.totalValo.toFixed(1)+'€</span>'+
+        '<span style="font-family:Geist Mono,monospace;font-size:10px;color:'+(p.netValo<0?'var(--rupture)':'var(--ok)')+';width:50px;text-align:right">'+p.netValo.toFixed(1)+'€</span>'+
         '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3);width:40px;text-align:right">'+p.mvts.length+'</span>'+
         '<span style="color:var(--text3);font-size:12px;width:14px;text-align:center">▸</span>'+
       '</div>'+
