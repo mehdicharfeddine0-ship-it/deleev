@@ -2798,7 +2798,7 @@ function uRenderClosing(ct){
   const p=uParsed;
   // Build lookup from BL: gtin -> quantiteLivreeEnUniteDeConsommation
   const blLookup={};
-  p.raw.lignesLivraison.forEach(l=>{
+  (DU.lignesLivraison||[]).forEach(l=>{
     const gtin=l.gtin||'';
     const ucLiv=l.quantiteLivreeEnUniteDeConsommation||0;
     if(!blLookup[gtin])blLookup[gtin]=0;
