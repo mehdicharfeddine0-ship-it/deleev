@@ -415,16 +415,11 @@ module.exports = async function handler(req, res) {
         for (var i = 0; i < items.length; i++) {
           var item = items[i];
           var prod = item.product || {};
-          // Get zone from by_centers for center 9
+          // Get zone from product_center (already filtered for the order's center)
           var zone = '';
-          if (prod.by_centers && Array.isArray(prod.by_centers)) {
-            for (var j = 0; j < prod.by_centers.length; j++) {
-              if (prod.by_centers[j].center === 9) {
-                var bc = prod.by_centers[j];
-                zone = (bc.aisle || '') + '.' + (bc.shelf || '') + '.' + (bc.tier || '');
-                break;
-              }
-            }
+          var pc = prod.product_center;
+          if (pc) {
+            zone = (pc.area || 0) + '.' + (pc.shelf || 0) + '.' + (pc.tier || 0);
           }
           products.push({
             id: prod.id || item.product_id || 0,
@@ -435,7 +430,9 @@ module.exports = async function handler(req, res) {
             qtyColis: item.quantity || 0,
             qtyAdded: item.added_quantity || 0,
             qi: item.quantity_ideal || 0,
-            added: !!item.added
+            added: !!item.added,
+            stock: pc ? pc.stock_quantity : 0,
+            realQty: item.real_quantity || 0
           });
         }
         
