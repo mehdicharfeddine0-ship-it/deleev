@@ -644,9 +644,25 @@ td{padding:9px 10px;vertical-align:middle;}
         <span class="rc" id="iPeriod">—</span>
       </div>
 
-      <div id="iStatsBar" class="u-kpis" style="padding:12px 24px"></div>
+      <div style="position:sticky;top:52px;z-index:100;background:var(--bg)">
+      <div id="iStatsBar" class="u-kpis" style="padding:8px 24px"></div>
 
-      <div class="tw" style="padding:0 24px">
+      <div style="display:flex;align-items:center;gap:8px;font-family:'Geist Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--text3);border-bottom:1px solid var(--border);padding:6px 24px">
+        <span style="width:22px"></span>
+        <span style="flex:1;min-width:180px">Produit</span>
+        <span style="width:60px">ID</span>
+        <span style="width:90px">Fournisseur</span>
+        <span style="width:70px">Zone</span>
+        <span style="width:40px;text-align:right;color:var(--ok)">+</span>
+        <span style="width:40px;text-align:right;color:var(--rupture)">−</span>
+        <span style="width:50px;text-align:right">Net</span>
+        <span style="width:50px;text-align:right">Valo</span>
+        <span style="width:40px;text-align:right">Mvts</span>
+        <span style="width:14px"></span>
+      </div>
+      </div>
+
+      <div style="padding:0 24px">
         <div id="iContent"></div>
       </div>
     </div>
@@ -2787,20 +2803,28 @@ function iRender(){
   // Sort by biggest impact (most negative net change first)
   products.sort((a,b)=>a.netChange-b.netChange);
 
-  // Stats
-  const totalMvts=rows.length;
-  const totalNeg=rows.filter(r=>r._change<0).reduce((s,r)=>s+r._change,0);
-  const totalPos=rows.filter(r=>r._change>0).reduce((s,r)=>s+r._change,0);
-  const totalValo=rows.reduce((s,r)=>s+Math.abs(r._valo),0);
+  // Stats: perte nette par sous-type
+  const invSousTypes=['Inventaire (défaut)','Inventaire (dynamique)'];
+  const dlcSousTypes=['DLC dépassée','DLC courte'];
+  let perteInv=0,perteDlc=0,perteAutre=0;
+  rows.forEach(r=>{
+    if(r._change<0){
+      const st=r['Sous-type']||'';
+      if(invSousTypes.includes(st))perteInv+=r._valo;
+      else if(dlcSousTypes.includes(st))perteDlc+=r._valo;
+      else perteAutre+=r._valo;
+    }
+  });
+  // Alertes: mouvements qui s'annulent (net=0 mais y'a eu du négatif) = attention
   const alertCount=Object.values(byProd).filter(p=>p.totalNeg<=-5||p.totalValo>=20).length;
+  const attentionCount=Object.values(byProd).filter(p=>p.netChange===0&&p.totalNeg<0&&p.mvts.length>1).length;
 
   document.getElementById('iStatsBar').innerHTML=
-    '<div class="u-kpi"><div class="u-kpi-lbl">Mouvements</div><div class="u-kpi-val" style="color:var(--units)">'+totalMvts+'</div></div>'+
-    '<div class="u-kpi"><div class="u-kpi-lbl">Produits</div><div class="u-kpi-val">'+products.length+'</div></div>'+
-    '<div class="u-kpi"><div class="u-kpi-lbl">Total négatif</div><div class="u-kpi-val" style="color:var(--rupture)">'+totalNeg+'</div></div>'+
-    '<div class="u-kpi"><div class="u-kpi-lbl">Total positif</div><div class="u-kpi-val" style="color:var(--ok)">+'+totalPos+'</div></div>'+
-    '<div class="u-kpi"><div class="u-kpi-lbl">Valorisation</div><div class="u-kpi-val" style="color:var(--warn)">'+totalValo.toFixed(0)+'€</div></div>'+
-    '<div class="u-kpi"><div class="u-kpi-lbl">⚠ Alertes</div><div class="u-kpi-val" style="color:'+(alertCount>0?'var(--rupture)':'var(--ok)')+'">'+alertCount+'</div></div>';
+    '<div class="u-kpi"><div class="u-kpi-lbl">Perte Inventaire</div><div class="u-kpi-val" style="color:var(--rupture)">'+Math.abs(perteInv).toFixed(0)+'€</div></div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">Perte DLC</div><div class="u-kpi-val" style="color:var(--warn)">'+Math.abs(perteDlc).toFixed(0)+'€</div></div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">Perte Autre</div><div class="u-kpi-val">'+Math.abs(perteAutre).toFixed(0)+'€</div></div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">⚠ Alertes</div><div class="u-kpi-val" style="color:'+(alertCount>0?'var(--rupture)':'var(--ok)')+'">'+alertCount+'</div></div>'+
+    '<div class="u-kpi"><div class="u-kpi-lbl">⚡ Attention</div><div class="u-kpi-val" style="color:'+(attentionCount>0?'var(--warn)':'var(--ok)')+'">'+attentionCount+'</div><div class="u-kpi-sub">net=0 mais mvts</div></div>';
 
   document.getElementById('iPeriod').textContent=products.length+' produits · '+totalMvts+' mvts';
 
@@ -2810,23 +2834,25 @@ function iRender(){
 
   el.innerHTML=products.map(p=>{
     const isAlert=p.totalNeg<=-5||p.totalValo>=20;
+    const isAttention=p.netChange===0&&p.totalNeg<0&&p.mvts.length>1;
     const netColor=p.netChange>0?'var(--ok)':p.netChange<0?'var(--rupture)':'var(--text3)';
     const netSign=p.netChange>0?'+':'';
     const prodLink='https://products.app.deleev.com/products/'+p.id+'/edit';
+    const borderCol=isAlert?'color-mix(in srgb,var(--rupture) 30%,var(--border))':isAttention?'color-mix(in srgb,var(--warn) 30%,var(--border))':'var(--border)';
 
-    return'<div style="background:var(--surface);border:1px solid '+(isAlert?'color-mix(in srgb,var(--rupture) 30%,var(--border))':'var(--border)')+';border-radius:10px;margin-bottom:8px;overflow:hidden">'+
-      '<div onclick="iToggle(\'ip_'+p.id+'\')" style="cursor:pointer;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'+
-        (isAlert?'<span style="color:var(--rupture);font-size:14px">⚠</span>':'')+
-        '<a href="'+prodLink+'" target="_blank" onclick="event.stopPropagation()" style="font-size:13px;font-weight:500;color:var(--units);text-decoration:none;flex:1;min-width:200px">'+p.name+'</a>'+
-        '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3)">#'+p.id+'</span>'+
-        '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3)">'+p.fournisseur+'</span>'+
-        '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3)">z:'+p.zone+'</span>'+
-        '<span style="font-family:Geist Mono,monospace;font-size:12px;color:var(--ok);font-weight:600;min-width:40px;text-align:right">+'+(p.totalPos)+'</span>'+
-        '<span style="font-family:Geist Mono,monospace;font-size:12px;color:var(--rupture);font-weight:600;min-width:40px;text-align:right">'+(p.totalNeg)+'</span>'+
-        '<span style="font-family:Geist Mono,monospace;font-size:13px;font-weight:700;color:'+netColor+';min-width:50px;text-align:right">'+netSign+p.netChange+'</span>'+
-        '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--warn);min-width:45px;text-align:right">'+p.totalValo.toFixed(1)+'€</span>'+
-        '<span style="color:var(--text3);font-size:11px">'+p.mvts.length+' mvt'+(p.mvts.length>1?'s':'')+'</span>'+
-        '<span style="color:var(--text3);font-size:14px">▸</span>'+
+    return'<div style="background:var(--surface);border:1px solid '+borderCol+';border-radius:10px;margin-bottom:6px;overflow:hidden">'+
+      '<div onclick="iToggle(\'ip_'+p.id+'\')" style="cursor:pointer;padding:10px 16px;display:flex;align-items:center;gap:8px">'+
+        '<span style="width:22px;text-align:center;flex-shrink:0">'+(isAlert?'<span style="color:var(--rupture)">⚠</span>':isAttention?'<span style="color:var(--warn)">⚡</span>':'')+'</span>'+
+        '<a href="'+prodLink+'" target="_blank" onclick="event.stopPropagation()" style="flex:1;min-width:180px;font-size:12px;font-weight:500;color:var(--units);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+p.name+'</a>'+
+        '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3);width:60px">#'+p.id+'</span>'+
+        '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3);width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+p.fournisseur+'</span>'+
+        '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3);width:70px">'+p.zone+'</span>'+
+        '<span style="font-family:Geist Mono,monospace;font-size:11px;color:var(--ok);font-weight:600;width:40px;text-align:right">+'+(p.totalPos)+'</span>'+
+        '<span style="font-family:Geist Mono,monospace;font-size:11px;color:var(--rupture);font-weight:600;width:40px;text-align:right">'+(p.totalNeg)+'</span>'+
+        '<span style="font-family:Geist Mono,monospace;font-size:12px;font-weight:700;color:'+netColor+';width:50px;text-align:right">'+netSign+p.netChange+'</span>'+
+        '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--warn);width:50px;text-align:right">'+p.totalValo.toFixed(1)+'€</span>'+
+        '<span style="font-family:Geist Mono,monospace;font-size:10px;color:var(--text3);width:40px;text-align:right">'+p.mvts.length+'</span>'+
+        '<span style="color:var(--text3);font-size:12px;width:14px;text-align:center">▸</span>'+
       '</div>'+
       '<div id="ip_'+p.id+'" style="display:none;border-top:1px solid var(--border);padding:8px 16px;background:var(--surface2)">'+
         '<table style="width:100%;border-collapse:collapse;font-family:Geist Mono,monospace;font-size:11px">'+
