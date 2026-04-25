@@ -282,29 +282,6 @@ td{padding:9px 10px;vertical-align:middle;}
         <div id="uCmdStatus" style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--text3);margin-top:4px;display:none"></div>
       </div>
     </div>
-    <div class="drop-zone-u" id="dzU">
-      <div class="dz-label" style="color:var(--ok)">🧊 Système U frais</div>
-      <div class="drop-icon">↑</div>
-      <div class="drop-text">Glisse le <strong>JSON commande</strong> Système U<br>ou clique pour choisir</div>
-      <input type="file" id="fU" accept=".json">
-      <div class="file-ok" id="fUname" style="display:none"></div>
-      <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px" onclick="event.stopPropagation()">
-        <div style="display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:wrap">
-          <button class="ebtn" id="btnFetchU" onclick="uFetchList()" style="font-size:11px;padding:6px 14px">🔄 Charger les BL</button>
-          <span style="color:var(--text3);font-size:11px">ou</span>
-          <div style="display:flex;gap:4px;align-items:center">
-            <input id="uSearchCmd" type="text" placeholder="N° commande" style="font-family:'Geist Mono',monospace;font-size:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;outline:none;width:110px" onkeydown="if(event.key==='Enter')uSearchCommande()">
-            <button class="ebtn" onclick="uSearchCommande()" style="font-size:10px;padding:5px 10px">🔍</button>
-          </div>
-        </div>
-        <div style="margin-top:8px;text-align:center">
-          <button class="ebtn" onclick="uListOrders()" style="font-size:10px;padding:5px 12px;border-color:color-mix(in srgb,var(--units) 40%,transparent);color:var(--units);background:color-mix(in srgb,var(--units) 8%,transparent)">📋 Voir les commandes SU</button>
-        </div>
-        <div id="uFetchStatus" style="font-family:'Geist Mono',monospace;font-size:10px;color:var(--text3);margin-top:6px;display:none"></div>
-        <div id="uBLList" style="margin-top:8px;display:none;max-height:250px;overflow-y:auto"></div>
-        <div id="uOrdersList" style="margin-top:8px;display:none;max-height:250px;overflow-y:auto"></div>
-      </div>
-    </div>
     <div class="drop-zone" id="dzK" style="border-color:color-mix(in srgb,var(--ca) 40%,transparent)">
       <div class="dz-label" style="color:var(--ca)">📈 KPI Frais</div>
       <div class="drop-icon">↑</div>
