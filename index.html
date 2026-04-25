@@ -2756,12 +2756,11 @@ async function uSelectOrder(orderId){
     const resp=await fetch(U_PROXY+'?action=export_order&id='+orderId);
     const data=await resp.json();
     if(data.error){status.textContent='❌ '+data.error;status.style.color='var(--rupture)';return;}
-    if(!data.csv){status.textContent='❌ Pas de CSV';status.style.color='var(--rupture)';return;}
+    if(!data.products||!data.products.length){status.textContent='❌ 0 produits';status.style.color='var(--rupture)';return;}
     
-    // Parse CSV
-    uOrderCsv=data.csv;
-    uOrderRows=parseOrderFormsCsv(data.csv);
-    status.textContent='✅ Commande #'+orderId+' : '+uOrderRows.length+' produits chargés';
+    uOrderRows=data.products;
+    uOrderCsv=true;
+    status.textContent='✅ Commande #'+orderId+' : '+data.count+' produits chargés';
     status.style.color='var(--ok)';
     document.getElementById('uOrdersList').style.display='none';
     
@@ -2794,7 +2793,7 @@ function parseOrderFormsCsv(csvText){
 }
 
 function uRenderClosing(ct){
-  if(!uOrderRows.length||!uParsed){ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Geist Mono,monospace;font-size:12px">Chargez une commande CSV et un BL JSON pour voir le closing</div>';return;}
+  if(!uOrderRows.length||!uParsed){ct.innerHTML='<div style="padding:40px;text-align:center;color:var(--text3);font-family:Geist Mono,monospace;font-size:12px">Chargez une commande et un BL JSON pour voir le closing</div>';return;}
   
   const p=uParsed;
   // Build lookup from BL: gtin -> quantiteLivreeEnUniteDeConsommation
@@ -2806,21 +2805,21 @@ function uRenderClosing(ct){
     blLookup[gtin]+=ucLiv;
   });
   
-  // Build comparison rows
+  // Build comparison rows from JSON products
   const compare=[];
   uOrderRows.forEach(r=>{
-    const barcode=(r['Code barre']||'').trim();
-    const zone=r['zone']||r['Zonage']||'';
+    const barcode=(r.barcode||'').trim();
+    const zone=r.zone||'';
     const zoneNum=parseInt(zone.split('.')[0])||0;
     if(zoneNum<1000)return; // Only frais
     
-    const ucCmd=parseInt(r['Quantité ajoutée'])||0;
+    const ucCmd=r.qtyAdded||0;
     const ucLiv=blLookup[barcode]||0;
     const ecart=ucLiv-ucCmd;
     
     compare.push({
-      id:r['ID produit']||'',
-      name:r['Produit']||'',
+      id:r.id||'',
+      name:r.name||'',
       barcode:barcode,
       zone:zone,
       zoneSort:zone.split('.').map(n=>parseInt(n)||0),
