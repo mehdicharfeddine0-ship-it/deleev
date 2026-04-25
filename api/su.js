@@ -282,6 +282,38 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({ error: 'Google Sheets error: ' + err.message });
       }
 
+    } else if (action === 'fetch_casse') {
+      var dateMin = req.query.date_min || '';
+      var dateMax = req.query.date_max || '';
+      if (!dateMin) {
+        var today = new Date().toISOString().split('T')[0];
+        dateMin = today;
+        dateMax = today;
+      }
+      if (!dateMax) dateMax = dateMin;
+      
+      try {
+        var casseUrl = BASE + '/log_viewer/destock_reasons_csv?view_mode=0' +
+          '&period_beginning_date=' + dateMin + '&period_beginning_time=00%3A00' +
+          '&period_end_date=' + dateMax + '&period_end_time=23%3A59' +
+          '&selling_method=&lower_valuation=&greater_valuation=' +
+          '&lower_stock_diff=&greater_stock_diff=' +
+          '&form_product_id=&form_pseudozone_id=' +
+          '&calculus_mode=typology&form_user_id=' +
+          '&logistics_center_id=9&typology_id=0&current_zone=' +
+          '&sorting_mode_logs=0&sorting_mode=0';
+        
+        var casseResp = await fetch(casseUrl, { headers: headers, redirect: 'follow' });
+        if (!casseResp.ok) return res.status(200).json({ error: 'HTTP ' + casseResp.status });
+        var csvText = await casseResp.text();
+        if (csvText.includes('FormSignin') || csvText.includes('action="/account/login"')) {
+          return res.status(200).json({ error: 'Session expirée' });
+        }
+        return res.status(200).json({ csv: csvText, date_min: dateMin, date_max: dateMax });
+      } catch (err) {
+        return res.status(200).json({ error: 'Casse error: ' + err.message });
+      }
+
     } else if (action === 'probe_ruptures') {
       try {
         var rupUrl = BASE + '/stats/stock_monitor/suppliers_v2?logistics_center_ids=9';
