@@ -282,6 +282,76 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({ error: 'Google Sheets error: ' + err.message });
       }
 
+    } else if (action === 'list_orders') {
+      // Scrape supplier-orders page for last 10 orders
+      try {
+        var ordersUrl = 'https://products.app.deleev.com/supplier-orders?ordering=-pk&supplier_id=192&expected_delivery_date_gte&expected_delivery_date_lte&logistics_center_id=9';
+        var ordersResp = await fetch(ordersUrl, { headers: { 'Cookie': cookie, 'User-Agent': 'Mozilla/5.0' }, redirect: 'follow' });
+        if (!ordersResp.ok) return res.status(200).json({ error: 'HTTP ' + ordersResp.status });
+        var ordersHtml = await ordersResp.text();
+        if (ordersHtml.includes('connexion') || ordersHtml.includes('login')) {
+          return res.status(200).json({ error: 'Session expirée' });
+        }
+        
+        // Parse table rows
+        var orders = [];
+        var tbodyMatch = ordersHtml.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/i);
+        if (tbodyMatch) {
+          var trRe = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+          var trM;
+          while ((trM = trRe.exec(tbodyMatch[1])) !== null && orders.length < 10) {
+            var row = trM[1];
+            var tds = [];
+            var tdRe = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+            var tdM;
+            while ((tdM = tdRe.exec(row)) !== null) {
+              tds.push(tdM[1].replace(/<[^>]+>/g, '').trim());
+            }
+            // Extract order ID from link
+            var idMatch = row.match(/order_forms\/(\d+)|orderforms\/(\d+)|id=(\d+)/i);
+            var orderId = idMatch ? (idMatch[1] || idMatch[2] || idMatch[3]) : (tds[0] || '');
+            if (!orderId || tds.length < 5) continue;
+            
+            orders.push({
+              id: orderId,
+              centre: tds[1] || '',
+              totalProduits: tds[2] || '',
+              dateEnvoi: tds[4] || '',
+              dateLivraison: tds[5] || '',
+              statut: tds[6] || '',
+              montant: tds[8] || ''
+            });
+          }
+        }
+        
+        return res.status(200).json({ orders: orders });
+      } catch (err) {
+        return res.status(200).json({ error: 'list_orders error: ' + err.message });
+      }
+
+    } else if (action === 'export_order') {
+      // Fetch order CSV from API
+      var orderId = req.query.id || '';
+      if (!orderId) return res.status(200).json({ error: 'id requis' });
+      
+      try {
+        var orderUrl = 'https://api.deleev.com/order_forms/?id=' + orderId;
+        var orderResp = await fetch(orderUrl, {
+          headers: {
+            'Authorization': 'Token ' + apiToken,
+            'Accept': 'application/json, text/plain, */*',
+            'User-Agent': 'Mozilla/5.0',
+            'Origin': 'https://products.app.deleev.com',
+            'Referer': 'https://products.app.deleev.com/'
+          }
+        });
+        if (!orderResp.ok) return res.status(200).json({ error: 'HTTP ' + orderResp.status });
+        var csvText = await orderResp.text();
+        return res.status(200).json({ csv: csvText, id: orderId });
+      } catch (err) {
+        return res.status(200).json({ error: 'export_order error: ' + err.message });
+      }
+
     } else if (action === 'fetch_casse') {
       var dateMin = req.query.date_min || '';
       var dateMax = req.query.date_max || '';
