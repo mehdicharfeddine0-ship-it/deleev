@@ -2982,9 +2982,10 @@ function uRenderClosing(ct){
     const barcode=(r.barcode||'').trim().padStart(14,'0');
     usedBarcodes.add(barcode);
     const zone=r.zone||'';
-    const ucCmd=r.qtyAdded||0;
+    const ucCmd=r.qtyCommandeUC||0;
+    const ucMeS=r.qtyAdded||0;
     const ucLiv=blLookup[barcode]||0;
-    const ecart=ucLiv-ucCmd;
+    const ecart=ucMeS-ucLiv;
     
     compare.push({
       id:r.id||'',
@@ -2993,6 +2994,7 @@ function uRenderClosing(ct){
       zone:zone,
       zoneSort:zone.split('.').map(n=>parseInt(n)||0),
       ucCmd:ucCmd,
+      ucMeS:ucMeS,
       ucLiv:ucLiv,
       ecart:ecart,
       matched:blLookup.hasOwnProperty(barcode),
@@ -3013,8 +3015,9 @@ function uRenderClosing(ct){
       zone:'',
       zoneSort:[0,0,0],
       ucCmd:0,
+      ucMeS:0,
       ucLiv:ucLiv,
-      ecart:ucLiv,
+      ecart:0-ucLiv,
       matched:true,
       isReplacement:true
     });
@@ -3033,8 +3036,8 @@ function uRenderClosing(ct){
   const totalProducts=compare.length;
   const matched=compare.filter(c=>c.matched).length;
   const matchPct=totalProducts>0?(matched/totalProducts*100):0;
-  const replacements=compare.filter(c=>c.isReplacement||(c.ucCmd===0&&c.ucLiv>0));
-  const ecarts=compare.filter(c=>c.ecart!==0&&!c.isReplacement&&!(c.ucCmd===0&&c.ucLiv>0)&&c.matched);
+  const replacements=compare.filter(c=>c.isReplacement||(c.ucMeS===0&&c.ucLiv>0));
+  const ecarts=compare.filter(c=>c.ecart!==0&&!c.isReplacement&&!(c.ucMeS===0&&c.ucLiv>0)&&c.matched);
   const withEcart=ecarts.length;
   const totalEcartNeg=ecarts.filter(c=>c.ecart<0).reduce((s,c)=>s+c.ecart,0);
   const totalEcartPos=ecarts.filter(c=>c.ecart>0).reduce((s,c)=>s+c.ecart,0);
@@ -3068,7 +3071,7 @@ function uRenderClosing(ct){
   h+='<thead><tr style="border-bottom:2px solid var(--border)">';
   h+='<th style="text-align:left;padding:8px;color:var(--text3);font-weight:500">Produit</th>';
   h+='<th style="text-align:left;padding:8px;color:var(--text3);font-weight:500;width:80px">Zone</th>';
-  h+='<th style="text-align:right;padding:8px;color:var(--text3);font-weight:500;width:60px">Cmd UC</th>';
+  h+='<th style="text-align:right;padding:8px;color:var(--text3);font-weight:500;width:60px">MeS UC</th>';
   h+='<th style="text-align:right;padding:8px;color:var(--text3);font-weight:500;width:60px">Livré UC</th>';
   h+='<th style="text-align:right;padding:8px;color:var(--text3);font-weight:500;width:60px">Écart</th>';
   h+='</tr></thead><tbody>';
@@ -3082,7 +3085,7 @@ function uRenderClosing(ct){
     h+='<tr style="border-bottom:1px solid var(--border);'+rowBg+'">';
     h+='<td style="padding:8px"><a href="'+prodLink+'" target="_blank" style="color:var(--units);text-decoration:none">'+c.name+'</a> <span style="color:var(--text3);font-size:9px">'+(c.id?'#'+c.id:'')+'</span>'+(c.isReplacement?' <span style="font-size:9px;background:color-mix(in srgb,var(--promo) 15%,transparent);color:var(--promo);padding:1px 5px;border-radius:3px">remplacement</span>':'')+'</td>';
     h+='<td style="padding:8px;color:var(--text3)">'+c.zone+'</td>';
-    h+='<td style="padding:8px;text-align:right;color:var(--text2)">'+c.ucCmd+'</td>';
+    h+='<td style="padding:8px;text-align:right;color:var(--text2)">'+c.ucMeS+'</td>';
     h+='<td style="padding:8px;text-align:right;color:var(--text2);font-weight:500">'+(c.matched?c.ucLiv:'<span style="color:var(--text3)">—</span>')+'</td>';
     h+='<td style="padding:8px;text-align:right;color:'+ecartColor+';font-weight:700">'+ecartSign+c.ecart+'</td>';
     h+='</tr>';
