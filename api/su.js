@@ -455,6 +455,7 @@ module.exports = async function handler(req, res) {
             zone: zone,
             packaging: item.packaging || 1,
             qtyColis: item.quantity || 0,
+            qtyCommandeUC: (item.quantity || 0) * (item.packaging || 1),
             qtyAdded: item.added_quantity || 0,
             qi: item.quantity_ideal || 0,
             added: !!item.added,
