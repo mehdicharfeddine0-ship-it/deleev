@@ -282,6 +282,33 @@ module.exports = async function handler(req, res) {
         return res.status(200).json({ error: 'Google Sheets error: ' + err.message });
       }
 
+    } else if (action === 'save_closing' || action === 'update_closing' || action === 'close_palette' || action === 'finish_closing') {
+      var gSheetUrl = 'https://script.google.com/macros/s/AKfycbzWrYdVI5cuyP5iLOMBTmx6d_XPKaGR0h9_8nJUnVl8yBjQ0mYAXO7FZ2hEcBR7sUGu/exec';
+      var payload = req.body;
+      payload.action = action;
+      try {
+        var gResp = await fetch(gSheetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        var gData = await gResp.json();
+        return res.status(200).json(gData);
+      } catch (err) {
+        return res.status(200).json({ error: 'Closing error: ' + err.message });
+      }
+
+    } else if (action === 'load_closing') {
+      var gSheetUrl = 'https://script.google.com/macros/s/AKfycbzWrYdVI5cuyP5iLOMBTmx6d_XPKaGR0h9_8nJUnVl8yBjQ0mYAXO7FZ2hEcBR7sUGu/exec';
+      var orderId = req.query.order_id || '';
+      try {
+        var gResp = await fetch(gSheetUrl + '?action=load_closing&order_id=' + orderId);
+        var gData = await gResp.json();
+        return res.status(200).json(gData);
+      } catch (err) {
+        return res.status(200).json({ error: 'Load closing error: ' + err.message, rows: [] });
+      }
+
     } else if (action === 'probe_orders') {
       try {
         var ordersUrl = 'https://products.app.deleev.com/supplier-orders?ordering=-pk&supplier_id=192&expected_delivery_date_gte&expected_delivery_date_lte&logistics_center_id=9';
