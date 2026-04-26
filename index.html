@@ -2975,6 +2975,19 @@ function uRenderClosing(ct){
     blLookup[gtin]+=ucLiv;
   });
   
+  // Build supplier ref lookup from BL (normalize: remove 0100 prefix)
+  const blSupRefLookup={};
+  (DU.lignesLivraison||[]).forEach(l=>{
+    const code=l.codeUniteLivraisonCommandee||'';
+    if(code){
+      const gtin=(l.gtin||'').padStart(14,'0');
+      const val=blLookup[gtin]||0;
+      blSupRefLookup[code]=val;
+      if(code.startsWith('0100'))blSupRefLookup[code.substring(4)]=val;
+      else blSupRefLookup['0100'+code]=val;
+    }
+  });
+  
   // Build comparison rows - ALL products from order
   const compare=[];
   const usedBarcodes=new Set();
@@ -2984,7 +2997,13 @@ function uRenderClosing(ct){
     const zone=r.zone||'';
     const ucCmd=r.qtyCommandeUC||0;
     const ucMeS=r.qtyAdded||0;
-    const ucLiv=blLookup[barcode]||0;
+    let ucLiv=blLookup[barcode]||0;
+    let matched=blLookup.hasOwnProperty(barcode);
+    // Fallback: try supplier reference
+    if(!matched&&r.supplierRef){
+      ucLiv=blSupRefLookup[r.supplierRef]||0;
+      matched=ucLiv>0;
+    }
     const ecart=ucMeS-ucLiv;
     
     compare.push({
