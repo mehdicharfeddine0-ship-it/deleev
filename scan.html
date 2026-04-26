@@ -93,6 +93,60 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         <button class="btn btn-scan" onclick="startPDA()" style="flex:1;background:var(--ok)">📟 Mode PDA</button>
       </div>
     </div>
+    <div class="setup-card" id="closingSetupCard" style="display:none">
+      <h2>📋 Mode Closing</h2>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Scanner les palettes après mise en stock pour vérifier les écarts</div>
+      <div style="margin-bottom:10px">
+        <button class="btn btn-primary" onclick="loadClosingOrders()" id="btnClosingOrders">📋 Charger commandes SU</button>
+        <div class="status" id="closingOrderStatus"></div>
+        <div id="closingOrderList" style="max-height:200px;overflow-y:auto;margin-top:8px"></div>
+      </div>
+      <div id="closingReady" style="display:none">
+        <div style="font-size:11px;color:var(--ok);margin-bottom:8px" id="closingOrderInfo"></div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-scan" onclick="startClosingScanner()" style="flex:1">📷 Closing Caméra</button>
+          <button class="btn btn-scan" onclick="startClosingPDA()" style="flex:1;background:var(--ok)">📟 Closing PDA</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CLOSING VIEW -->
+<div id="closingView" style="display:none;flex-direction:column;min-height:100vh;min-height:100dvh">
+  <div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;background:var(--surface);border-bottom:1px solid var(--border)">
+    <button class="back" onclick="stopClosing()">← Retour</button>
+    <button class="btn" onclick="refreshClosingOrder()" style="font-size:11px;padding:4px 10px">🔄 Actualiser</button>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text2)" id="closingScanCount">0 palette(s)</span>
+  </div>
+  
+  <!-- Scan input for closing -->
+  <div id="closingScanArea" style="padding:16px">
+    <div style="text-align:center;margin-bottom:12px;font-size:13px;font-weight:500">Scanner une palette pour vérifier les écarts</div>
+    <div style="display:flex;gap:8px;max-width:400px;margin:0 auto">
+      <input id="closingPdaInput" type="text" inputmode="numeric" autocomplete="off" autofocus
+        placeholder="Scanner ou taper le code SSCC..."
+        style="flex:1;font-family:'JetBrains Mono',monospace;font-size:16px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:12px 16px;outline:none;text-align:center"
+        onkeydown="if(event.key==='Enter'){closingProcess();event.preventDefault();}">
+      <button class="btn btn-scan" onclick="closingProcess()" style="padding:12px 16px">→</button>
+    </div>
+    <div id="closingStatus" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3);margin-top:8px;text-align:center">En attente du scan...</div>
+  </div>
+  
+  <!-- Ecart display (one by one) -->
+  <div id="closingEcartArea" style="display:none;padding:16px;flex:1">
+    <div id="closingEcartContent"></div>
+  </div>
+  
+  <!-- Palette summary -->
+  <div id="closingPalSummary" style="display:none;padding:16px">
+    <div id="closingPalSummaryContent"></div>
+  </div>
+  
+  <!-- Closing history -->
+  <div id="closingHistory" style="padding:0 16px;overflow-y:auto;flex:1">
+    <div style="font-size:12px;font-weight:500;margin-bottom:8px;color:var(--text2)">Palettes closées</div>
+    <div id="closingHistoryList"></div>
   </div>
 </div>
 
@@ -222,6 +276,7 @@ async function loadProducts(){
     matchPalettes();
     computePriority();
     document.getElementById('readyCard').style.display='block';
+    document.getElementById('closingSetupCard').style.display='block';
     document.getElementById('readySummary').textContent=palettes.length+' palettes · '+palPriority.length+' en priorité · '+Object.keys(productsMap).length+' produits matchables';
   }catch(e){st.textContent='❌ '+e.message;st.className='status err';}
 }
@@ -529,6 +584,347 @@ function pdaUpdateHistory(){
       ${s.allFS?'<span class="tag-fs">FS</span>':''}
     </div>`;
   });
+  el.innerHTML=h;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODE CLOSING
+// ═══════════════════════════════════════════════════════════════════════════
+let closingOrderRows=[], closingOrderId=null, closingBlData=null;
+let closingPalEcarts=[], closingCurrentIdx=0, closingCurrentPalId=null;
+let closedPalettes=new Set(), closingHistory=[];
+
+// Show closing setup when BL+products are loaded
+function checkClosingReady(){
+  const card=document.getElementById('closingSetupCard');
+  if(card&&blData)card.style.display='block';
+}
+
+async function loadClosingOrders(){
+  const st=document.getElementById('closingOrderStatus');
+  st.textContent='⏳ Chargement...';st.style.color='var(--text2)';
+  try{
+    const r=await fetch(PROXY+'?action=list_orders');
+    const d=await r.json();
+    if(d.error){st.textContent='❌ '+d.error;st.style.color='var(--rupture)';return;}
+    const orders=d.orders||[];
+    st.textContent='✅ '+orders.length+' commandes';st.style.color='var(--ok)';
+    const el=document.getElementById('closingOrderList');
+    el.innerHTML=orders.map(o=>{
+      const col=o.statusRaw==='sent'?'var(--warn)':'var(--ok)';
+      return`<div onclick="selectClosingOrder('${o.id}')" style="cursor:pointer;padding:8px;border:1px solid var(--border);border-radius:7px;margin-bottom:4px;font-family:JetBrains Mono,monospace;font-size:11px;display:flex;gap:8px;align-items:center" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+        <span style="font-weight:600;color:var(--units)">#${o.id}</span>
+        <span style="color:${col}">${o.status}</span>
+        <span style="color:var(--text3)">livr. ${o.dateDelivery}</span>
+        <span style="color:var(--text3);margin-left:auto">${o.totalProducts} prod.</span>
+      </div>`;
+    }).join('');
+  }catch(e){st.textContent='❌ '+e.message;st.style.color='var(--rupture)';}
+}
+
+async function selectClosingOrder(orderId){
+  const st=document.getElementById('closingOrderStatus');
+  st.textContent='⏳ Chargement commande #'+orderId+'...';st.style.color='var(--text2)';
+  try{
+    const r=await fetch(PROXY+'?action=export_order&id='+orderId);
+    const d=await r.json();
+    if(d.error||!d.products){st.textContent='❌ '+(d.error||'0 produits');st.style.color='var(--rupture)';return;}
+    closingOrderRows=d.products;
+    closingOrderId=orderId;
+    closingBlData=blData;
+    st.textContent='';
+    document.getElementById('closingOrderList').innerHTML='';
+    document.getElementById('closingOrderInfo').textContent='Commande #'+orderId+' : '+d.count+' produits · BL chargé';
+    document.getElementById('closingReady').style.display='block';
+    // Load existing closing data
+    await loadClosingData();
+  }catch(e){st.textContent='❌ '+e.message;st.style.color='var(--rupture)';}
+}
+
+async function loadClosingData(){
+  try{
+    const r=await fetch(PROXY+'?action=load_closing&order_id='+closingOrderId);
+    const d=await r.json();
+    closingHistory=(d.rows||[]);
+    // Mark palettes as closed
+    closedPalettes=new Set();
+    closingHistory.forEach(row=>{
+      if(row.closing_complete==='true'||row.closing_complete===true)closedPalettes.add(row.palette_id);
+    });
+  }catch(e){console.error(e);}
+}
+
+function startClosingScanner(){
+  document.getElementById('setupView').style.display='none';
+  document.getElementById('closingView').style.display='flex';
+  // Could add camera mode here, for now use PDA input
+  document.getElementById('closingPdaInput').focus();
+  updateClosingHistory();
+}
+
+function startClosingPDA(){
+  startClosingScanner(); // Same view, PDA input
+}
+
+function stopClosing(){
+  document.getElementById('closingView').style.display='none';
+  document.getElementById('setupView').style.display='block';
+}
+
+async function refreshClosingOrder(){
+  if(!closingOrderId)return;
+  const st=document.getElementById('closingStatus');
+  st.textContent='⏳ Actualisation...';st.style.color='var(--text2)';
+  try{
+    const r=await fetch(PROXY+'?action=export_order&id='+closingOrderId);
+    const d=await r.json();
+    if(d.products)closingOrderRows=d.products;
+    st.textContent='✅ Actualisé ('+closingOrderRows.length+' produits)';st.style.color='var(--ok)';
+    setTimeout(()=>{st.textContent='En attente du scan...';st.style.color='var(--text3)';},2000);
+  }catch(e){st.textContent='❌ '+e.message;st.style.color='var(--rupture)';}
+}
+
+async function closingProcess(){
+  const input=document.getElementById('closingPdaInput');
+  const code=input.value.trim();
+  input.value='';
+  if(!code)return;
+  
+  const st=document.getElementById('closingStatus');
+  
+  // Clean SSCC
+  let sscc=code.replace(/[\s\(\)]/g,'');
+  if(sscc.startsWith('00')&&sscc.length===20)sscc=sscc.substring(2);
+  
+  // Find palette
+  let pal=palettes.find(p=>p.id===sscc);
+  if(!pal)pal=palettes.find(p=>p.id===code.replace(/[\s\(\)]/g,''));
+  if(!pal)pal=palettes.find(p=>p.id.slice(-12)===sscc.slice(-12));
+  if(!pal)pal=palettes.find(p=>p.short===sscc.slice(-6));
+  
+  if(!pal){
+    st.textContent='❌ Palette non trouvée: '+sscc.slice(-6);
+    st.style.color='var(--rupture)';
+    return;
+  }
+  
+  if(closedPalettes.has(pal.id)){
+    st.textContent='ℹ Palette #'+pal.short+' déjà closée';
+    st.style.color='var(--warn)';
+    return;
+  }
+  
+  closingCurrentPalId=pal.id;
+  st.textContent='⏳ Actualisation commande...';st.style.color='var(--text2)';
+  
+  // Refresh order data
+  await refreshClosingOrder();
+  
+  // Build ecarts for this palette
+  const blLookup={};
+  (blData.lignesLivraison||[]).forEach(l=>{
+    const gtin=(l.gtin||'').padStart(14,'0');
+    const ucLiv=l.quantiteLivreeEnUniteDeConsommation||0;
+    if(!blLookup[gtin])blLookup[gtin]=0;
+    blLookup[gtin]+=ucLiv;
+  });
+  
+  // Get palette items
+  const palItems=pal.items||[];
+  const ecarts=[];
+  
+  palItems.forEach(item=>{
+    const gtin=(item.gtin||'').padStart(14,'0');
+    // Find in order
+    const orderItem=closingOrderRows.find(r=>(r.barcode||'').trim().padStart(14,'0')===gtin);
+    const ucCmd=orderItem?orderItem.qtyAdded:0;
+    const ucLiv=item.qty||0; // colis from BL
+    // Actually we need UC from BL
+    const blLine=(blData.lignesLivraison||[]).find(l=>(l.gtin||'').padStart(14,'0')===gtin);
+    const ucLivBl=blLine?blLine.quantiteLivreeEnUniteDeConsommation:0;
+    const ecart=ucLivBl-ucCmd;
+    const zone=orderItem?orderItem.zone:'';
+    
+    if(ecart!==0){
+      ecarts.push({
+        productId:orderItem?orderItem.id:item.gtin,
+        productName:orderItem?orderItem.name:(blLine?blLine.libelleUniteLivraison:item.gtin),
+        zone:zone,
+        zoneSort:(zone||'').split('.').map(n=>parseInt(n)||0),
+        cmdUc:ucCmd,
+        livrUc:ucLivBl,
+        ecart:ecart,
+        status:'pending',
+        isReplacement:ucCmd===0&&ucLivBl>0
+      });
+    }
+  });
+  
+  // Sort by zone ascending
+  ecarts.sort((a,b)=>{
+    for(let i=0;i<3;i++){
+      const diff=(a.zoneSort[i]||0)-(b.zoneSort[i]||0);
+      if(diff!==0)return diff;
+    }
+    return 0;
+  });
+  
+  if(ecarts.length===0){
+    // No ecarts!
+    st.textContent='';
+    showClosingPalResult(pal, 0, 0);
+    // Save to GSheets
+    await saveClosingPalette(pal.id, [{
+      product_id:'_no_ecart',product_name:'Pas d\'écart',zone:'',cmd_uc:0,livr_uc:0,ecart:0,status:'ok'
+    }]);
+    return;
+  }
+  
+  // Save ecarts to GSheets
+  await saveClosingPalette(pal.id, ecarts.map(e=>({
+    product_id:e.productId,product_name:e.productName,zone:e.zone,
+    cmd_uc:e.cmdUc,livr_uc:e.livrUc,ecart:e.ecart,status:'pending'
+  })));
+  
+  // Show ecarts one by one
+  closingPalEcarts=ecarts;
+  closingCurrentIdx=0;
+  st.textContent='';
+  document.getElementById('closingScanArea').style.display='none';
+  document.getElementById('closingEcartArea').style.display='block';
+  document.getElementById('closingPalSummary').style.display='none';
+  renderClosingEcart();
+}
+
+function renderClosingEcart(){
+  const el=document.getElementById('closingEcartContent');
+  const e=closingPalEcarts[closingCurrentIdx];
+  const pal=palettes.find(p=>p.id===closingCurrentPalId);
+  const total=closingPalEcarts.length;
+  const ecartColor=e.ecart>0?'var(--ok)':e.ecart<0?'var(--rupture)':'var(--text3)';
+  const ecartSign=e.ecart>0?'+':'';
+  
+  el.innerHTML=`
+    <div style="text-align:center;margin-bottom:16px">
+      <span style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text3)">Palette #${pal?pal.short:''}</span>
+      <span style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text2);margin-left:8px">Écart ${closingCurrentIdx+1}/${total}</span>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;text-align:center">
+      ${e.isReplacement?'<div style="font-size:10px;background:color-mix(in srgb,var(--promo) 15%,transparent);color:var(--promo);padding:3px 10px;border-radius:4px;display:inline-block;margin-bottom:8px">Remplacement possible</div>':''}
+      <div style="font-size:15px;font-weight:600;margin-bottom:8px;color:var(--text)">${e.productName}</div>
+      <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text3);margin-bottom:16px">${e.zone?'Zone: '+e.zone:''} ${e.productId?'#'+e.productId:''}</div>
+      <div style="display:flex;justify-content:center;gap:24px;margin-bottom:20px">
+        <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Commandé</div><div style="font-size:24px;font-weight:700;color:var(--text2)">${e.cmdUc}</div></div>
+        <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Livré</div><div style="font-size:24px;font-weight:700;color:var(--text)">${e.livrUc}</div></div>
+        <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Écart</div><div style="font-size:24px;font-weight:700;color:${ecartColor}">${ecartSign}${e.ecart}</div></div>
+      </div>
+      <div style="display:flex;gap:12px;justify-content:center">
+        <button onclick="closingAction('corrected')" style="flex:1;max-width:160px;padding:14px;border-radius:10px;border:none;background:var(--ok);color:#fff;font-size:14px;font-weight:600;cursor:pointer">✓ Corrigé</button>
+        <button onclick="closingAction('skipped')" style="flex:1;max-width:160px;padding:14px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:14px;font-weight:600;cursor:pointer">Skip →</button>
+      </div>
+    </div>
+    <div style="margin-top:12px;text-align:center">
+      <div class="u-bar-bg" style="height:4px;max-width:300px;margin:0 auto"><div class="u-bar-fg" style="width:${((closingCurrentIdx)/total*100).toFixed(0)}%;background:var(--ok)"></div></div>
+    </div>`;
+}
+
+async function closingAction(status){
+  const e=closingPalEcarts[closingCurrentIdx];
+  e.status=status;
+  
+  // Update in GSheets
+  try{
+    await fetch(PROXY+'?action=update_closing',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({order_id:closingOrderId,palette_id:closingCurrentPalId,product_id:e.productId,status:status})
+    });
+  }catch(err){console.error(err);}
+  
+  closingCurrentIdx++;
+  if(closingCurrentIdx<closingPalEcarts.length){
+    renderClosingEcart();
+  }else{
+    // All ecarts processed
+    const corrected=closingPalEcarts.filter(e=>e.status==='corrected').length;
+    const skipped=closingPalEcarts.filter(e=>e.status==='skipped').length;
+    showClosingPalResult(palettes.find(p=>p.id===closingCurrentPalId),corrected,skipped);
+  }
+}
+
+function showClosingPalResult(pal,corrected,skipped){
+  document.getElementById('closingEcartArea').style.display='none';
+  document.getElementById('closingPalSummary').style.display='block';
+  const total=corrected+skipped;
+  
+  document.getElementById('closingPalSummaryContent').innerHTML=`
+    <div style="background:var(--surface);border:1px solid var(--ok);border-radius:14px;padding:24px;text-align:center">
+      <div style="font-size:32px;margin-bottom:8px">${total===0?'✅':'📋'}</div>
+      <div style="font-size:16px;font-weight:600;margin-bottom:4px">Palette #${pal?pal.short:''}</div>
+      ${total===0?
+        '<div style="color:var(--ok);font-size:14px;margin-bottom:16px">Aucun écart — tout est OK !</div>':
+        `<div style="font-size:13px;color:var(--text2);margin-bottom:16px">${corrected} corrigé${corrected>1?'s':''} · ${skipped} skip${skipped>1?'s':''}</div>`
+      }
+      <div style="display:flex;gap:12px;justify-content:center">
+        <button onclick="markPaletteClosed('${pal?pal.id:''}')" style="flex:1;max-width:200px;padding:12px;border-radius:10px;border:none;background:var(--ok);color:#fff;font-size:14px;font-weight:600;cursor:pointer">✓ Palette closée</button>
+        <button onclick="backToClosingScan()" style="flex:1;max-width:200px;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:14px;cursor:pointer">Scanner suivante</button>
+      </div>
+    </div>`;
+}
+
+async function markPaletteClosed(palId){
+  closedPalettes.add(palId);
+  try{
+    await fetch(PROXY+'?action=close_palette',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({order_id:closingOrderId,palette_id:palId})
+    });
+  }catch(e){console.error(e);}
+  backToClosingScan();
+}
+
+function backToClosingScan(){
+  document.getElementById('closingPalSummary').style.display='none';
+  document.getElementById('closingEcartArea').style.display='none';
+  document.getElementById('closingScanArea').style.display='block';
+  document.getElementById('closingPdaInput').focus();
+  updateClosingHistory();
+}
+
+async function saveClosingPalette(palId, items){
+  try{
+    await fetch(PROXY+'?action=save_closing',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        order_id:closingOrderId,
+        bl_id:blData.idBonDeLivraison||'',
+        palette_id:palId,
+        items:items
+      })
+    });
+  }catch(e){console.error(e);}
+}
+
+function updateClosingHistory(){
+  const el=document.getElementById('closingHistoryList');
+  const count=closedPalettes.size;
+  document.getElementById('closingScanCount').textContent=count+' palette(s) closée(s)';
+  
+  let h='';
+  palettes.forEach(pal=>{
+    const isClosed=closedPalettes.has(pal.id);
+    if(!isClosed)return;
+    h+=`<div style="padding:6px 10px;border:1px solid var(--ok);border-radius:7px;margin-bottom:4px;font-family:JetBrains Mono,monospace;font-size:11px;display:flex;gap:8px;align-items:center;background:color-mix(in srgb,var(--ok) 5%,transparent)">
+      <span style="color:var(--ok)">✓</span>
+      <span style="font-weight:500">#${pal.short}</span>
+      <span style="color:var(--text3)">${pal.colis} colis · ${pal.items.length} réf</span>
+      <span style="color:var(--ok);margin-left:auto">closée</span>
+    </div>`;
+  });
+  
+  if(!h)h='<div style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text3);text-align:center;padding:20px">Aucune palette closée</div>';
   el.innerHTML=h;
 }
 </script>
