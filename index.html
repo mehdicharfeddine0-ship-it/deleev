@@ -2495,7 +2495,7 @@ function uRenderVue(ct){
       <div style="font-size:10px;color:var(--text3)">colis</div>
       ${fsLabel}
       ${md||uOrderRows.length?`<div style="margin-top:6px"><div class="u-bar-bg" style="height:3px"><div class="u-bar-fg" style="width:${(pal.ruptureRate*100).toFixed(0)}%;background:${rc}"></div></div><div style="font-family:'Geist Mono',monospace;font-size:9px;color:${rc};margin-top:2px">${pal.ruptureCount>0?pal.ruptureCount+' rupt. ('+(pal.ruptureRate*100).toFixed(1)+'%)':pal.stockZeroCount>0?pal.stockZeroCount+' stock=0':'✓ OK'}</div></div>`:''}
-      ${uOrderRows.length?`<div style="margin-top:4px"><div class="u-bar-bg" style="height:3px"><div class="u-bar-fg" style="width:${pal.items.length>0?(pal.addedCount/pal.items.length*100).toFixed(0):0}%;background:var(--ok)"></div></div><div style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--ok);margin-top:2px">${pal.addedCount}/${pal.items.length} MeS</div></div>`:''}
+      ${uOrderRows.length?`<div style="margin-top:4px"><div class="u-bar-bg" style="height:3px"><div class="u-bar-fg" style="width:${pal.items.length>0?(pal.addedCount/pal.items.length*100).toFixed(0):0}%;background:var(--ok)"></div></div><div style="font-family:'Geist Mono',monospace;font-size:9px;color:var(--ok);margin-top:2px">${pal.addedCount}/${pal.items.length} MeS${uClosedPalettes.has(pal.id)?' · <span style="color:var(--units)">closé ✓</span>':pal.addedCount>=pal.items.length?' · <span style="color:var(--warn)">non closé</span>':''}</div></div>`:''}
     </div>`;
   });
   h+='</div>';
@@ -2829,6 +2829,19 @@ let _lastProdCSV=null;
 // COMMANDES SYSTÈME U + CLOSING
 // ═══════════════════════════════════════════════════════════════════════════
 let uOrderCsv=null, uOrderRows=[], uClosingFilter='all', uLastOrderId=null;
+let uClosedPalettes=new Set();
+
+async function uLoadClosingStatus(){
+  if(!uLastOrderId)return;
+  try{
+    const r=await fetch(U_PROXY+'?action=load_closing&order_id='+uLastOrderId);
+    const d=await r.json();
+    uClosedPalettes=new Set();
+    (d.rows||[]).forEach(row=>{
+      if(row.closing_complete==='true'||row.closing_complete===true)uClosedPalettes.add(row.palette_id);
+    });
+  }catch(e){console.error(e);}
+}
 
 async function uListOrders(){
   const status=document.getElementById('uFetchStatus');
@@ -2874,6 +2887,9 @@ async function uSelectOrder(orderId){
     status.style.color='var(--ok)';
     document.getElementById('uOrdersList').style.display='none';
     
+    // Load closing status
+    await uLoadClosingStatus();
+    
     // If already in dashboard with BL loaded, refresh to show Closing tab
     if(DU)uRender();
   }catch(e){status.textContent='❌ '+e.message;status.style.color='var(--rupture)';}
@@ -2904,6 +2920,9 @@ async function uRefreshOrder(){
     const diffPals=palsDoneAfter-palsDoneBefore;
     
     uLastRefreshData={addedCount:addedAfter,addedColis:colisAfter,palsDone:palsDoneAfter,time:new Date()};
+    
+    // Reload closing status
+    await uLoadClosingStatus();
     
     uRender();
     
