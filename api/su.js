@@ -452,6 +452,7 @@ module.exports = async function handler(req, res) {
             id: prod.id || item.product_id || 0,
             name: prod.selling_name || '',
             barcode: prod.barcode || '',
+            supplierRef: item.supplierreference ? item.supplierreference.supplier_reference : '',
             zone: zone,
             packaging: item.packaging || 1,
             qtyColis: item.quantity || 0,
