@@ -812,28 +812,39 @@ async function closingProcess(){
   const palItems=pal.items||[];
   const ecarts=[];
   
+  // Build total BL lookup: gtin -> total UC livrée
+  const blTotalLookup={};
+  (blData.lignesLivraison||[]).forEach(l=>{
+    const gtin=(l.gtin||'').padStart(14,'0');
+    const ucLiv=l.quantiteLivreeEnUniteDeConsommation||0;
+    if(!blTotalLookup[gtin])blTotalLookup[gtin]=0;
+    blTotalLookup[gtin]+=ucLiv;
+  });
+  
   palItems.forEach(item=>{
     const gtin=(item.gtin||'').padStart(14,'0');
     // Find in order
     const orderItem=closingOrderRows.find(r=>(r.barcode||'').trim().padStart(14,'0')===gtin);
     const ucCmd=orderItem?orderItem.qtyAdded:0;
-    // Use TOTAL UC from BL (not per palette)
-    const blLine=(blData.lignesLivraison||[]).find(l=>(l.gtin||'').padStart(14,'0')===gtin);
-    const ucLivBl=blLine?blLine.quantiteLivreeEnUniteDeConsommation:0;
-    const ecart=ucLivBl-ucCmd;
+    // UC on this palette
+    const ucPalette=item.qty||0;
+    // Total UC across all BL lines
+    const ucTotalBl=blTotalLookup[gtin]||0;
+    const ecart=ucTotalBl-ucCmd;
     const zone=orderItem?orderItem.zone:'';
     
     if(ucCmd!==0&&ecart!==0){
       ecarts.push({
         productId:orderItem?orderItem.id:'',
-        productName:orderItem?orderItem.name:(blLine?blLine.libelleUniteLivraison:item.gtin),
+        productName:orderItem?orderItem.name:(item.name||item.gtin),
         zone:zone,
         zoneSort:(zone||'').split('.').map(n=>parseInt(n)||0),
         cmdUc:ucCmd,
-        livrUc:ucLivBl,
+        livrUc:ucTotalBl,
+        ucPalette:ucPalette,
         ecart:ecart,
         status:'pending',
-        isReplacement:ucCmd===0&&ucLivBl>0
+        isReplacement:false
       });
     }
   });
@@ -894,7 +905,7 @@ function renderClosingEcart(){
       <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text3);margin-bottom:16px">${e.productId?'#'+e.productId:''}</div>
       <div style="display:flex;justify-content:center;gap:24px;margin-bottom:20px">
         <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Commandé</div><div style="font-size:24px;font-weight:700;color:var(--text2)">${e.cmdUc}</div></div>
-        <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Livré</div><div style="font-size:24px;font-weight:700;color:var(--text)">${e.livrUc}</div></div>
+        <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Livré total</div><div style="font-size:24px;font-weight:700;color:var(--text)">${e.livrUc}</div><div style="font-size:10px;color:var(--text3)">${e.ucPalette} sur cette pal.</div></div>
         <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Écart</div><div style="font-size:24px;font-weight:700;color:${ecartColor}">${ecartSign}${e.ecart}</div></div>
       </div>
       <div style="display:flex;gap:12px;justify-content:center">
