@@ -346,6 +346,10 @@ async function selectScanOrder(orderId){
         const bc=p.barcode.trim().padStart(14,'0');
         productsMap[bc]={stock:p.stock??0,name:p.name||'',zone:parseInt((p.zone||'0').split('.')[0])||0,added:p.added,addedQty:p.qtyAdded};
       }
+      if(p.supplierRef){
+        productsMap['ref_'+p.supplierRef]={stock:p.stock??0,name:p.name||'',zone:parseInt((p.zone||'0').split('.')[0])||0,added:p.added,addedQty:p.qtyAdded};
+        productsMap['ref_0100'+p.supplierRef]={stock:p.stock??0,name:p.name||'',zone:parseInt((p.zone||'0').split('.')[0])||0,added:p.added,addedQty:p.qtyAdded};
+      }
     });
     
     st.textContent='✅ Commande #'+orderId+' : '+d.count+' produits';st.className='status ok';
@@ -404,6 +408,7 @@ function parsePalettes(){
       if(palMap[s.idSupport]){
         palMap[s.idSupport].items.push({
           name:l.libelleUniteLivraison,gtin:l.gtin,ean14:l.ean14,
+          codeRef:l.codeUniteLivraisonCommandee||'',
           qty:s.nbArticlesSurSupport||l.quantiteEnUniteDeLivraison?.livree||0,
           bio:(l.commentaire||'').includes('BIO')
         });
@@ -418,7 +423,8 @@ function matchPalettes(){
     let matched=0,rupt=0,fsColis=0;
     pal.items.forEach(item=>{
       const padded=(item.gtin||'').padStart(14,'0');
-      const tries=[item.gtin,padded,item.gtin?.slice(1),'0'+item.gtin,item.ean14,item.ean14?.slice(1),(item.ean14||'').padStart(14,'0')].filter(Boolean);
+      const refKey=item.codeRef?'ref_'+item.codeRef:'';
+      const tries=[item.gtin,padded,item.gtin?.slice(1),'0'+item.gtin,item.ean14,item.ean14?.slice(1),(item.ean14||'').padStart(14,'0'),refKey].filter(Boolean);
       let found=null;
       for(const t of tries){if(productsMap[t]){found=productsMap[t];break;}}
       item.matched=!!found;
@@ -751,6 +757,19 @@ async function startFullClosing(){
     blTotalLookup[gtin]+=ucLiv;
   });
   
+  // Build supplier ref lookup from BL (normalize: remove 0100 prefix)
+  const blSupRefLookup={};
+  (blData.lignesLivraison||[]).forEach(l=>{
+    const code=l.codeUniteLivraisonCommandee||'';
+    if(code){
+      const gtin=(l.gtin||'').padStart(14,'0');
+      const val=blTotalLookup[gtin]||0;
+      blSupRefLookup[code]=val;
+      if(code.startsWith('0100'))blSupRefLookup[code.substring(4)]=val;
+      else blSupRefLookup['0100'+code]=val;
+    }
+  });
+  
   const seen=new Set();
   const allEcarts=[];
   closingOrderRows.forEach(r=>{
@@ -758,7 +777,11 @@ async function startFullClosing(){
     if(seen.has(bc))return;
     seen.add(bc);
     const ucMeS=r.qtyAdded||0;
-    const ucTotalBl=blTotalLookup[bc]||0;
+    // Try barcode first, then supplier reference
+    let ucTotalBl=blTotalLookup[bc]||0;
+    if(ucTotalBl===0&&r.supplierRef){
+      ucTotalBl=blSupRefLookup[r.supplierRef]||0;
+    }
     const ecart=ucMeS-ucTotalBl;
     if(ucMeS!==0&&ecart!==0){
       allEcarts.push({
@@ -991,8 +1014,13 @@ async function closingProcess(){
   
   palItems.forEach(item=>{
     const gtin=(item.gtin||'').padStart(14,'0');
-    // Find in order
-    const orderItem=closingOrderRows.find(r=>(r.barcode||'').trim().padStart(14,'0')===gtin);
+    // Find BL line for this item
+    const blLine=(blData.lignesLivraison||[]).find(l=>(l.gtin||'').padStart(14,'0')===gtin);
+    const blCode=blLine?blLine.codeUniteLivraisonCommandee:'';
+    const blCodeShort=blCode.startsWith('0100')?blCode.substring(4):blCode;
+    // Find in order: try barcode first, then supplier reference
+    const orderItem=closingOrderRows.find(r=>(r.barcode||'').trim().padStart(14,'0')===gtin)
+      || (blCode?closingOrderRows.find(r=>r.supplierRef&&(r.supplierRef===blCode||r.supplierRef===blCodeShort||'0100'+r.supplierRef===blCode)):null);
     const ucMeS=orderItem?orderItem.qtyAdded:0;
     const ucRealCmd=orderItem?orderItem.realQty:0;
     // UC on this palette
