@@ -783,7 +783,8 @@ async function startFullClosing(){
       ucTotalBl=blSupRefLookup[r.supplierRef]||0;
     }
     const ecart=ucMeS-ucTotalBl;
-    if(ucMeS!==0&&ecart!==0){
+    const matched=blTotalLookup.hasOwnProperty(bc)||(r.supplierRef&&(blSupRefLookup.hasOwnProperty(r.supplierRef)));
+    if(ucMeS!==0&&ecart!==0&&matched){
       allEcarts.push({
         productId:r.id||'',
         productName:r.name||'',
