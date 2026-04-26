@@ -2936,7 +2936,7 @@ function uRenderClosing(ct){
   const matched=compare.filter(c=>c.matched).length;
   const matchPct=totalProducts>0?(matched/totalProducts*100):0;
   const replacements=compare.filter(c=>c.isReplacement||(c.ucCmd===0&&c.ucLiv>0));
-  const ecarts=compare.filter(c=>c.ecart!==0&&!c.isReplacement&&!(c.ucCmd===0&&c.ucLiv>0));
+  const ecarts=compare.filter(c=>c.ecart!==0&&!c.isReplacement&&!(c.ucCmd===0&&c.ucLiv>0)&&c.matched);
   const withEcart=ecarts.length;
   const totalEcartNeg=ecarts.filter(c=>c.ecart<0).reduce((s,c)=>s+c.ecart,0);
   const totalEcartPos=ecarts.filter(c=>c.ecart>0).reduce((s,c)=>s+c.ecart,0);
