@@ -108,13 +108,28 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         <button class="btn btn-scan" onclick="startPDA()" style="flex:1;background:var(--ok)">📟 PDA</button>
       </div>
       <div id="closingModeArea" style="display:none">
-        <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Mode Closing</div>
-        <div style="display:flex;gap:10px">
+        <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Mode Closing par palette</div>
+        <div style="display:flex;gap:10px;margin-bottom:16px">
           <button class="btn btn-scan" onclick="startClosingScanner()" style="flex:1;background:var(--units)">📷 Closing Caméra</button>
           <button class="btn btn-scan" onclick="startClosingPDA()" style="flex:1;background:var(--units)">📟 Closing PDA</button>
         </div>
+        <div style="font-size:11px;font-weight:600;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Closing commande complète</div>
+        <button class="btn btn-scan" onclick="startFullClosing()" style="width:100%;background:var(--warn)">📋 Voir tous les écarts</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- FULL CLOSING VIEW -->
+<div id="fullClosingView" style="display:none;flex-direction:column;min-height:100vh;min-height:100dvh">
+  <div style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;background:var(--surface);border-bottom:1px solid var(--border)">
+    <button class="back" onclick="stopFullClosing()">← Retour</button>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600">📋 Closing commande complète</span>
+    <button class="btn" onclick="refreshClosingOrder()" style="font-size:11px;padding:4px 10px">🔄 Actualiser</button>
+  </div>
+  <div id="fullClosingContent" style="padding:16px;flex:1;overflow-y:auto"></div>
+  <div id="fullClosingEcartArea" style="display:none;padding:16px">
+    <div id="fullClosingEcartContent"></div>
   </div>
 </div>
 
@@ -716,6 +731,159 @@ let closedPalettes=new Set(), closingHistory=[];
 function checkClosingReady(){
   const card=document.getElementById('closingSetupCard');
   if(card&&blData)card.style.display='block';
+}
+
+let fullClosingEcarts=[], fullClosingIdx=0;
+
+async function startFullClosing(){
+  document.getElementById('setupView').style.display='none';
+  document.getElementById('fullClosingView').style.display='flex';
+  
+  // Refresh order data
+  await refreshClosingOrder();
+  
+  // Build all ecarts across all palettes
+  const blTotalLookup={};
+  (blData.lignesLivraison||[]).forEach(l=>{
+    const gtin=(l.gtin||'').padStart(14,'0');
+    const ucLiv=l.quantiteLivreeEnUniteDeConsommation||0;
+    if(!blTotalLookup[gtin])blTotalLookup[gtin]=0;
+    blTotalLookup[gtin]+=ucLiv;
+  });
+  
+  const seen=new Set();
+  const allEcarts=[];
+  closingOrderRows.forEach(r=>{
+    const bc=(r.barcode||'').trim().padStart(14,'0');
+    if(seen.has(bc))return;
+    seen.add(bc);
+    const ucMeS=r.qtyAdded||0;
+    const ucTotalBl=blTotalLookup[bc]||0;
+    const ecart=ucMeS-ucTotalBl;
+    if(ucMeS!==0&&ecart!==0){
+      allEcarts.push({
+        productId:r.id||'',
+        productName:r.name||'',
+        zone:r.zone||'',
+        zoneSort:(r.zone||'').split('.').map(n=>parseInt(n)||0),
+        cmdUc:r.realQty||0,
+        mesUc:ucMeS,
+        livrUc:ucTotalBl,
+        ucPalette:0,
+        ecart:ecart,
+        status:'pending'
+      });
+    }
+  });
+  
+  // Sort by zone ascending
+  allEcarts.sort((a,b)=>{
+    for(let i=0;i<3;i++){
+      const diff=(a.zoneSort[i]||0)-(b.zoneSort[i]||0);
+      if(diff!==0)return diff;
+    }
+    return 0;
+  });
+  
+  fullClosingEcarts=allEcarts;
+  fullClosingIdx=0;
+  
+  if(allEcarts.length===0){
+    document.getElementById('fullClosingContent').innerHTML=`
+      <div style="text-align:center;padding:60px">
+        <div style="font-size:40px;margin-bottom:12px">✅</div>
+        <div style="font-size:16px;font-weight:600;color:var(--ok)">Aucun écart</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:8px">Toutes les quantités mises en stock correspondent aux livraisons</div>
+      </div>`;
+    document.getElementById('fullClosingEcartArea').style.display='none';
+    return;
+  }
+  
+  // Show summary + start button
+  document.getElementById('fullClosingContent').innerHTML=`
+    <div style="text-align:center;padding:20px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px">${allEcarts.length} écarts à traiter</div>
+      <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text3);margin-bottom:16px">Triés par zone croissante</div>
+      <button onclick="startFullClosingFlow()" class="btn btn-scan" style="background:var(--warn);padding:14px 40px;font-size:14px">▶ Commencer le closing</button>
+    </div>`;
+}
+
+function startFullClosingFlow(){
+  document.getElementById('fullClosingContent').style.display='none';
+  document.getElementById('fullClosingEcartArea').style.display='block';
+  fullClosingIdx=0;
+  renderFullClosingEcart();
+}
+
+function renderFullClosingEcart(){
+  const el=document.getElementById('fullClosingEcartContent');
+  const e=fullClosingEcarts[fullClosingIdx];
+  const total=fullClosingEcarts.length;
+  const ecartColor=e.ecart>0?'var(--ok)':e.ecart<0?'var(--rupture)':'var(--text3)';
+  const ecartSign=e.ecart>0?'+':'';
+  
+  el.innerHTML=`
+    <div style="text-align:center;margin-bottom:16px">
+      <span style="font-family:JetBrains Mono,monospace;font-size:12px;color:var(--text2);font-weight:600">Écart ${fullClosingIdx+1}/${total}</span>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;text-align:center">
+      <a href="https://products.app.deleev.com/products/${e.productId}?tab=stock" target="_blank" style="font-size:15px;font-weight:600;margin-bottom:8px;color:var(--units);text-decoration:none;display:block">${e.productName}</a>
+      <div style="font-family:JetBrains Mono,monospace;font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px;background:color-mix(in srgb,var(--units) 10%,transparent);display:inline-block;padding:4px 14px;border-radius:6px">${e.zone||'—'}</div>
+      <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text3);margin-bottom:16px">${e.productId?'#'+e.productId:''}</div>
+      <div style="display:flex;justify-content:center;gap:16px;margin-bottom:20px;flex-wrap:wrap">
+        <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Commandé</div><div style="font-size:22px;font-weight:700;color:var(--text2)">${e.cmdUc}</div></div>
+        <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">MeS</div><div style="font-size:22px;font-weight:700;color:var(--ok)">${e.mesUc}</div></div>
+        <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Livré</div><div style="font-size:22px;font-weight:700;color:var(--text)">${e.livrUc}</div></div>
+        <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Écart</div><div style="font-size:22px;font-weight:700;color:${ecartColor}">${ecartSign}${e.ecart}</div></div>
+      </div>
+      <div style="display:flex;gap:12px;justify-content:center">
+        ${fullClosingIdx>0?'<button onclick="fullClosingBack()" style="padding:14px 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text3);font-size:13px;cursor:pointer">← Retour</button>':''}
+        <button onclick="fullClosingAction('corrected')" style="flex:1;max-width:160px;padding:14px;border-radius:10px;border:none;background:var(--ok);color:#fff;font-size:14px;font-weight:600;cursor:pointer">✓ Corrigé</button>
+        <button onclick="fullClosingAction('skipped')" style="flex:1;max-width:160px;padding:14px;border-radius:10px;border:1px solid var(--border);background:var(--surface2);color:var(--text2);font-size:14px;font-weight:600;cursor:pointer">Skip →</button>
+      </div>
+    </div>
+    <div style="margin-top:12px;text-align:center">
+      <div class="u-bar-bg" style="height:4px;max-width:300px;margin:0 auto"><div class="u-bar-fg" style="width:${((fullClosingIdx)/total*100).toFixed(0)}%;background:var(--ok)"></div></div>
+    </div>`;
+}
+
+function fullClosingBack(){
+  if(fullClosingIdx>0){fullClosingIdx--;renderFullClosingEcart();}
+}
+
+async function fullClosingAction(status){
+  const e=fullClosingEcarts[fullClosingIdx];
+  e.status=status;
+  
+  try{
+    await fetch(PROXY+'?action=update_closing',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({order_id:closingOrderId,palette_id:'full',product_id:e.productId,status:status})
+    });
+  }catch(err){console.error(err);}
+  
+  fullClosingIdx++;
+  if(fullClosingIdx<fullClosingEcarts.length){
+    renderFullClosingEcart();
+  }else{
+    const corrected=fullClosingEcarts.filter(e=>e.status==='corrected').length;
+    const skipped=fullClosingEcarts.filter(e=>e.status==='skipped').length;
+    document.getElementById('fullClosingEcartContent').innerHTML=`
+      <div style="background:var(--surface);border:1px solid var(--ok);border-radius:14px;padding:24px;text-align:center">
+        <div style="font-size:32px;margin-bottom:8px">📋</div>
+        <div style="font-size:16px;font-weight:600;margin-bottom:4px">Closing terminé</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:16px">${corrected} corrigé${corrected>1?'s':''} · ${skipped} skip${skipped>1?'s':''}</div>
+        <button onclick="stopFullClosing()" class="btn btn-scan" style="background:var(--ok);padding:12px 30px">✓ Fermer</button>
+      </div>`;
+  }
+}
+
+function stopFullClosing(){
+  document.getElementById('fullClosingView').style.display='none';
+  document.getElementById('fullClosingContent').style.display='block';
+  document.getElementById('fullClosingEcartArea').style.display='none';
+  document.getElementById('setupView').style.display='block';
 }
 
 // closingOrderRows and closingOrderId are now set by selectScanOrder
