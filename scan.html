@@ -377,6 +377,26 @@ function activateReady(){
   document.getElementById('closingModeArea').style.display=scanOrderRows.length?'block':'none';
 }
 
+function parsePalettes(){
+  if(!blData)return;
+  const supports=blData.supportsDeLivraison||[];
+  const lignes=blData.lignesLivraison||[];
+  const palMap={};
+  supports.forEach(s=>{palMap[s.idSupport]={id:s.idSupport,short:s.idSupport.slice(-6),colis:s.nbColisSurSupport,items:[],ruptures:0,matchedCount:0,fsColis:0};});
+  lignes.forEach(l=>{
+    (l.supports||[]).forEach(s=>{
+      if(palMap[s.idSupport]){
+        palMap[s.idSupport].items.push({
+          name:l.libelleUniteLivraison,gtin:l.gtin,ean14:l.ean14,
+          qty:s.nbArticlesSurSupport||l.quantiteEnUniteDeLivraison?.livree||0,
+          bio:(l.commentaire||'').includes('BIO')
+        });
+      }
+    });
+  });
+  palettes=Object.values(palMap);
+}
+
 function matchPalettes(){
   palettes.forEach(pal=>{
     let matched=0,rupt=0,fsColis=0;
