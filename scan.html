@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -7,7 +7,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
-:root{--bg:#0c0f14;--surface:#161a22;--surface2:#1c2029;--border:#262a35;--text:#e8eaed;--text2:#8b8f9a;--text3:#555a66;--ok:#2dd4a0;--warn:#f5a524;--rupture:#f44;--units:#60a5fa;--fs:#f5a524}
+[data-theme="dark"]{--bg:#0c0f14;--surface:#161a22;--surface2:#1c2029;--border:#262a35;--text:#e8eaed;--text2:#8b8f9a;--text3:#555a66;--ok:#2dd4a0;--warn:#f5a524;--rupture:#f44;--units:#60a5fa;--fs:#f5a524}
+[data-theme="light"]{--bg:#f5f5f5;--surface:#fff;--surface2:#f0f0f0;--border:#e0e0e0;--text:#111;--text2:#666;--text3:#aaa;--ok:#16a34a;--warn:#ea580c;--rupture:#dc2626;--units:#0369a1;--fs:#ea580c}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;min-height:100dvh;overflow-x:hidden}
 .header{padding:16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
@@ -816,8 +817,7 @@ async function closingProcess(){
     // Find in order
     const orderItem=closingOrderRows.find(r=>(r.barcode||'').trim().padStart(14,'0')===gtin);
     const ucCmd=orderItem?orderItem.qtyAdded:0;
-    const ucLiv=item.qty||0; // colis from BL
-    // Actually we need UC from BL
+    // Use TOTAL UC from BL (not per palette)
     const blLine=(blData.lignesLivraison||[]).find(l=>(l.gtin||'').padStart(14,'0')===gtin);
     const ucLivBl=blLine?blLine.quantiteLivreeEnUniteDeConsommation:0;
     const ecart=ucLivBl-ucCmd;
@@ -890,7 +890,8 @@ function renderClosingEcart(){
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;text-align:center">
       ${e.isReplacement?'<div style="font-size:10px;background:color-mix(in srgb,var(--promo) 15%,transparent);color:var(--promo);padding:3px 10px;border-radius:4px;display:inline-block;margin-bottom:8px">Remplacement possible</div>':''}
       <a href="https://products.app.deleev.com/products/${e.productId}?tab=stock" target="_blank" style="font-size:15px;font-weight:600;margin-bottom:8px;color:var(--units);text-decoration:none;display:block">${e.productName}</a>
-      <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text3);margin-bottom:16px">${e.zone?'Zone: '+e.zone:''} ${e.productId?'#'+e.productId:''}</div>
+      <div style="font-family:JetBrains Mono,monospace;font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px;background:color-mix(in srgb,var(--units) 10%,transparent);display:inline-block;padding:4px 14px;border-radius:6px">${e.zone||'—'}</div>
+      <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:var(--text3);margin-bottom:16px">${e.productId?'#'+e.productId:''}</div>
       <div style="display:flex;justify-content:center;gap:24px;margin-bottom:20px">
         <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Commandé</div><div style="font-size:24px;font-weight:700;color:var(--text2)">${e.cmdUc}</div></div>
         <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase">Livré</div><div style="font-size:24px;font-weight:700;color:var(--text)">${e.livrUc}</div></div>
