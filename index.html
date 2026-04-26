@@ -1820,6 +1820,33 @@ let uSubTab='vue',uPalSort='colis',uExpandedPal=null;
 let uNbPrep=2,uCph=80,uTStart='06:00',uTEnd='';
 let uExcludedPals=new Set();
 let uParsed=null; // parsed JSON data
+let uTimerStart=null,uTimerInterval=null;
+let uLastRefreshData={addedCount:0,addedColis:0,palsDone:0,time:null};
+
+function uStartTimer(){
+  uTimerStart=Date.now();
+  uTimerInterval=setInterval(uUpdateTimer,1000);
+  uRender();
+}
+function uStopTimer(){
+  if(uTimerInterval)clearInterval(uTimerInterval);
+  uTimerInterval=null;
+  uRender();
+}
+function uResetTimer(){
+  if(uTimerInterval)clearInterval(uTimerInterval);
+  uTimerInterval=null;uTimerStart=null;
+  uRender();
+}
+function uUpdateTimer(){
+  const el=document.getElementById('uTimerDisplay');
+  if(!el||!uTimerStart)return;
+  const elapsed=Math.floor((Date.now()-uTimerStart)/1000);
+  const h=Math.floor(elapsed/3600);
+  const m=Math.floor((elapsed%3600)/60);
+  const s=elapsed%60;
+  el.textContent=(h>0?h+'h':'')+String(m).padStart(2,'0')+'m'+String(s).padStart(2,'0')+'s';
+}
 
 const U_PROXY='/api/su';
 let uSelectedBLs=new Set(); // pks selected for merge
@@ -2622,11 +2649,32 @@ function uRenderStock(ct){
   </div>`;
 
   // KPIs
+  // Calculate real CPH if timer is running and we have added data
+  let realCphHtml='';
+  if(uTimerStart&&addedColis>0){
+    const elapsedMs=Date.now()-uTimerStart;
+    const elapsedH=elapsedMs/3600000;
+    const realCph=elapsedH>0?Math.round(addedColis/elapsedH):0;
+    const realCphPerPrep=uNbPrep>0?Math.round(realCph/uNbPrep):0;
+    realCphHtml=`<div class="u-kpi"><div class="u-kpi-lbl">CPH réel</div><div class="u-kpi-val" style="color:${realCphPerPrep>=uCph?'var(--ok)':'var(--warn)'}">${fi(realCph)}/h</div><div class="u-kpi-sub">${realCphPerPrep}/prépa ${realCphPerPrep>=uCph?'✅':'⚠'}</div></div>`;
+  }
+  
+  // Timer
+  let timerHtml=`<div class="u-kpi"><div class="u-kpi-lbl">Timer</div><div class="u-kpi-val" id="uTimerDisplay" style="color:var(--units)">—</div><div class="u-kpi-sub">`;
+  if(!uTimerStart){
+    timerHtml+=`<button class="ebtn" onclick="uStartTimer()" style="font-size:10px;padding:2px 10px">▶ Démarrer</button>`;
+  }else{
+    timerHtml+=`<button class="cbtn" onclick="uStopTimer()" style="font-size:10px;padding:2px 10px">⏹ Stop</button> <button class="cbtn" onclick="uResetTimer()" style="font-size:10px;padding:2px 8px">↺</button>`;
+  }
+  timerHtml+=`</div></div>`;
+
   h+=`<div class="u-kpis">
     <div class="u-kpi"><div class="u-kpi-lbl">Cadence totale</div><div class="u-kpi-val" style="color:var(--units)">${fi(rate)}/h</div><div class="u-kpi-sub">${uNbPrep} × ${uCph}</div></div>
     <div class="u-kpi"><div class="u-kpi-lbl">Temps nécessaire</div><div class="u-kpi-val" style="color:var(--warn)">${hrsNeeded.toFixed(1)}h</div><div class="u-kpi-sub">${minNeeded} min</div></div>
     <div class="u-kpi"><div class="u-kpi-lbl">Fin estimée</div><div class="u-kpi-val" style="color:${early===false?'var(--rupture)':'var(--ok)'}">${finish}</div><div class="u-kpi-sub">${uTEnd&&early===true?'🎉 '+advance+' min d\'avance':uTEnd&&early===false?'⚠️ manque de temps':'Début '+uTStart}</div></div>
     <div class="u-kpi"><div class="u-kpi-lbl">Colis frais</div><div class="u-kpi-val" style="color:${left>0?'var(--warn)':'var(--ok)'}">${fi(Math.min(canDo,effectiveColis))}</div><div class="u-kpi-sub">sur ${fi(effectiveColis)}${fraisSecColis>0?' (excl. '+fi(fraisSecColis)+' F/S)':''}</div></div>
+    ${timerHtml}
+    ${realCphHtml}
   </div>`;
 
   // Progress
@@ -2833,12 +2881,43 @@ async function uSelectOrder(orderId){
 
 async function uRefreshOrder(){
   if(!uLastOrderId)return;
+  // Snapshot before refresh
+  const palsBefore=uGetPalAnalysis();
+  const addedBefore=palsBefore.reduce((s,p)=>s+(p.addedCount||0),0);
+  const colisBefore=palsBefore.reduce((s,p)=>s+(p.addedColis||0),0);
+  const palsDoneBefore=palsBefore.filter(p=>p.items.length>0&&p.addedCount>=p.items.length).length;
+  
   try{
     const resp=await fetch(U_PROXY+'?action=export_order&id='+uLastOrderId);
     const data=await resp.json();
     if(data.error||!data.products)return;
     uOrderRows=data.products;
+    
+    // Calculate diff
+    const palsAfter=uGetPalAnalysis();
+    const addedAfter=palsAfter.reduce((s,p)=>s+(p.addedCount||0),0);
+    const colisAfter=palsAfter.reduce((s,p)=>s+(p.addedColis||0),0);
+    const palsDoneAfter=palsAfter.filter(p=>p.items.length>0&&p.addedCount>=p.items.length).length;
+    
+    const diffProd=addedAfter-addedBefore;
+    const diffColis=colisAfter-colisBefore;
+    const diffPals=palsDoneAfter-palsDoneBefore;
+    
+    uLastRefreshData={addedCount:addedAfter,addedColis:colisAfter,palsDone:palsDoneAfter,time:new Date()};
+    
     uRender();
+    
+    // Show diff info
+    const info=document.getElementById('uRefreshInfo');
+    if(info&&(diffProd>0||diffPals>0)){
+      const parts=[];
+      if(diffProd>0)parts.push('+'+diffProd+' produits');
+      if(diffColis>0)parts.push('+'+diffColis+' colis');
+      if(diffPals>0)parts.push(diffPals+' palette'+(diffPals>1?'s':'')+' terminée'+(diffPals>1?'s':''));
+      info.textContent='✅ '+parts.join(' · ');
+      info.style.color='var(--ok)';
+      setTimeout(()=>{if(info)info.textContent='';},5000);
+    }
   }catch(e){console.error('Refresh error:',e);}
 }
 
