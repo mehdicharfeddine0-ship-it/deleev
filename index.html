@@ -2436,12 +2436,17 @@ function uRender(){
 
 function uGetPalAnalysis(){
   const p=uParsed,md=p.matchData;
-  // Build order lookup if available: barcode(padded) -> order item
+  // Build order lookup if available: barcode(padded) -> order item + supplierRef -> order item
   const orderLookup={};
+  const orderRefLookup={};
   if(uOrderRows.length){
     uOrderRows.forEach(r=>{
       const bc=(r.barcode||'').trim().padStart(14,'0');
       orderLookup[bc]=r;
+      if(r.supplierRef){
+        orderRefLookup[r.supplierRef]=r;
+        orderRefLookup['0100'+r.supplierRef]=r;
+      }
     });
   }
   return p.palettes.map(pal=>{
@@ -2449,7 +2454,12 @@ function uGetPalAnalysis(){
     const items=pal.items.map(item=>{
       const d=md?md.details.find(dd=>dd.gtin===item.gtin&&dd.supports.includes(pal.id)):null;
       const gtinPadded=(item.gtin||'').padStart(14,'0');
-      const orderItem=orderLookup[gtinPadded]||null;
+      // Try barcode first, then supplier reference fallback
+      let orderItem=orderLookup[gtinPadded]||null;
+      if(!orderItem&&item.code){
+        const codeShort=item.code.startsWith('0100')?item.code.substring(4):item.code;
+        orderItem=orderRefLookup[item.code]||orderRefLookup[codeShort]||null;
+      }
       // Determine if frais/sec: zone < 1000 from order data or match data
       const orderZone=orderItem?parseInt((orderItem.zone||'0').split('.')[0]):0;
       const matchZone=d?.zone??0;
@@ -3016,7 +3026,7 @@ function uRenderClosing(ct){
       ucMeS:ucMeS,
       ucLiv:ucLiv,
       ecart:ecart,
-      matched:blLookup.hasOwnProperty(barcode),
+      matched:matched,
       isReplacement:false
     });
   });
